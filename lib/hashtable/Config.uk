@@ -1,0 +1,3 @@
+config LIBHASHTABLE
+	bool "hashtable - Xenstore hashtable implementation"
+	default n
