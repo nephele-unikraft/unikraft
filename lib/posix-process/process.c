@@ -36,17 +36,32 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/unistd.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
 #include <uk/process.h>
 #include <uk/print.h>
+#include <uk/plat/clone.h>
 
 
-int fork(void)
+pid_t fork(void)
 {
-	/* fork() is not supported on this platform */
-	errno = ENOSYS;
-	return -1;
+	unsigned short child_id;
+	pid_t pid;
+	int rc;
+
+	rc = ukplat_clone(1, &child_id);
+	if (rc == 0) /* parent */
+		pid = child_id;
+	else if (rc == 1) /* child */
+		pid = 0;
+	else {
+		uk_pr_err("Error calling ukplat_clone() rc=%d\n", rc);
+		pid = -1;
+	}
+
+	return pid;
 }
 
 int vfork(void)
