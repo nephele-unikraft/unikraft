@@ -348,6 +348,12 @@ HYPERVISOR_hvm_op(int op, void *arg)
 	return _hypercall2(unsigned long, hvm_op, op, arg);
 }
 
+static inline int
+HYPERVISOR_clone(int op, void *arg)
+{
+	return _hypercall2(int, clone_op, op, arg);
+}
+
 #endif /* __HYPERCALL_X86_64_H__ */
 
 /*

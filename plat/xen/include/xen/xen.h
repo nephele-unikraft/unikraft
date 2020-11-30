@@ -121,6 +121,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 #define __HYPERVISOR_xc_reserved_op       39 /* reserved for XenClient */
 #define __HYPERVISOR_xenpmu_op            40
 #define __HYPERVISOR_dm_op                41
+#define __HYPERVISOR_clone_op             43
 
 /* Architecture-specific hypercall definitions. */
 #define __HYPERVISOR_arch_0               48
@@ -181,6 +182,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_ulong_t);
 #define VIRQ_XC_RESERVED 11 /* G. Reserved for XenClient                     */
 #define VIRQ_ENOMEM     12 /* G. (DOM0) Low on heap memory       */
 #define VIRQ_XENPMU     13 /* V.  PMC interrupt                              */
+#define VIRQ_CLONED     14 /* G. (DOM0) Cloned                               */
 
 /* Architecture-specific VIRQ definitions. */
 #define VIRQ_ARCH_0    16
@@ -574,6 +576,9 @@ DEFINE_XEN_GUEST_HANDLE(mmuext_op_t);
 
 /* DOMID_INVALID is used to identify pages with unknown owner. */
 #define DOMID_INVALID        xen_mk_uint(0x7FF4)
+
+/* Wildcard for any child domain. */
+#define DOMID_CHILD          xen_mk_uint(0x7FF5)
 
 /* Idle domain. */
 #define DOMID_IDLE           xen_mk_uint(0x7FFF)

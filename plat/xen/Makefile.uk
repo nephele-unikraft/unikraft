@@ -95,6 +95,7 @@ LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/emg_console.c
 endif
 LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/shutdown.c
 LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/events.c
+LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/clone.c
 
 ifeq ($(CONFIG_XEN_GNTTAB),y)
 LIBXENPLAT_SRCS-y              += $(LIBXENPLAT_BASE)/gnttab.c
