@@ -132,3 +132,4 @@ utimes
 lutimes
 posix_fadvise
 scandir
+socketpair_af_local

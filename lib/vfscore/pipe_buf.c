@@ -64,14 +64,17 @@ struct pipe_buf *pipe_buf_alloc(int capacity)
 	uk_mutex_init(&pipe_buf->wrlock);
 	uk_waitq_init(&pipe_buf->rdwq);
 	uk_waitq_init(&pipe_buf->wrwq);
+	pipe_buf->refcount = 0;
 
 	return pipe_buf;
 }
 
 void pipe_buf_free(struct pipe_buf *pipe_buf)
 {
-	free(pipe_buf->data);
-	free(pipe_buf);
+	if (pipe_buf->refcount == 0) {
+		free(pipe_buf->data);
+		free(pipe_buf);
+	}
 }
 
 static unsigned long pipe_buf_write_iovec(struct pipe_buf *pipe_buf,

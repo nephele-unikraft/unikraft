@@ -67,6 +67,7 @@ struct pipe_file *pipe_file_alloc(int capacity, int flags)
 		return NULL;
 	}
 
+	pipe_file->buf->refcount++;
 	pipe_file->w_refcount = 1;
 	pipe_file->r_refcount = 1;
 	pipe_file->flags = flags;
@@ -76,6 +77,7 @@ struct pipe_file *pipe_file_alloc(int capacity, int flags)
 
 void pipe_file_free(struct pipe_file *pipe_file)
 {
+	pipe_file->buf->refcount--;
 	pipe_buf_free(pipe_file->buf);
 	free(pipe_file);
 }

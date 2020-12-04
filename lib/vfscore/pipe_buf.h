@@ -58,6 +58,8 @@ struct pipe_buf {
 	struct uk_waitq rdwq;
 	/* Writers queue */
 	struct uk_waitq wrwq;
+	/* Reference counter */
+	unsigned long refcount;
 };
 
 
