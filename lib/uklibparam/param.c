@@ -273,7 +273,7 @@ static int kernel_lib_fetch(struct param_args *pargs,
 			return 0;
 		}
 	}
-	uk_pr_err("Failed to fetch the library\n");
+	uk_pr_err("Failed to fetch the library for '%s'\n", pargs->param);
 
 error_exit:
 	*section = NULL;
