@@ -39,11 +39,7 @@
 /* We use the default size in Linux kernel */
 #define PIPE_MAX_SIZE	(1 << CONFIG_LIBVFSCORE_PIPE_SIZE_ORDER)
 
-struct pipe_buf {
-	/* The buffer */
-	char *data;
-	/* The buffer capacity, always a power of 2 */
-	unsigned long capacity;
+struct pipe_buf_shared {
 	/* Producer index */
 	unsigned long prod;
 	/* Consumer index */
@@ -53,11 +49,21 @@ struct pipe_buf {
 	struct uk_mutex rdlock;
 	/* Write lock */
 	struct uk_mutex wrlock;
+};
+
+struct pipe_buf {
+	/* The buffer */
+	char *data;
+	/* The buffer capacity, always a power of 2 */
+	unsigned long capacity;
+
+	/* Shared ring */
+	struct pipe_buf_shared *shared;
 
 	/* Readers queue */
-	struct uk_waitq rdwq;
+	struct ukplat_notifier *rdntfr;
 	/* Writers queue */
-	struct uk_waitq wrwq;
+	struct ukplat_notifier *wrntfr;
 	/* Reference counter */
 	unsigned long refcount;
 };
@@ -65,17 +71,19 @@ struct pipe_buf {
 
 struct pipe_buf *pipe_buf_alloc(int capacity);
 void pipe_buf_free(struct pipe_buf *pipe_buf);
+void pipe_buf_close_read(struct pipe_buf *pipe_buf);
+void pipe_buf_close_write(struct pipe_buf *pipe_buf);
 
 static inline
 unsigned long pipe_buf_get_available(struct pipe_buf *pipe_buf)
 {
 	unsigned long avail;
 
-	uk_mutex_lock(&pipe_buf->wrlock);
-	uk_mutex_lock(&pipe_buf->rdlock);
-	avail = pipe_buf->prod - pipe_buf->cons;
-	uk_mutex_unlock(&pipe_buf->rdlock);
-	uk_mutex_unlock(&pipe_buf->wrlock);
+	uk_mutex_lock(&pipe_buf->shared->wrlock);
+	uk_mutex_lock(&pipe_buf->shared->rdlock);
+	avail = pipe_buf->shared->prod - pipe_buf->shared->cons;
+	uk_mutex_unlock(&pipe_buf->shared->rdlock);
+	uk_mutex_unlock(&pipe_buf->shared->wrlock);
 	return avail;
 }
 

@@ -119,17 +119,26 @@ static int sock_unix_close(struct vnode *vnode,
 		struct vfscore_file *vfscore_file)
 {
 	struct sock_unix_file *su_file = vnode->v_data;
+	int open_buffers = 2;
 
 	UK_ASSERT(vfscore_file->f_dentry->d_vnode == vnode);
 	UK_ASSERT(vnode->v_refcnt == 1);
 
 	if (vfscore_file->f_flags & UK_FREAD)
 		su_file->r_refcount--;
+	if (!su_file->r_refcount) {
+		pipe_buf_close_read(su_file->receiver);
+		open_buffers--;
+	}
 
 	if (vfscore_file->f_flags & UK_FWRITE)
 		su_file->w_refcount--;
+	if (!su_file->w_refcount) {
+		pipe_buf_close_write(su_file->sender);
+		open_buffers--;
+	}
 
-	if (!su_file->r_refcount && !su_file->w_refcount)
+	if (open_buffers == 0)
 		sock_unix_file_free(su_file);
 
 	return 0;

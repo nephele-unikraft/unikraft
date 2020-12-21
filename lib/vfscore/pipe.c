@@ -112,17 +112,26 @@ static int pipe_close(struct vnode *vnode,
 		struct vfscore_file *vfscore_file)
 {
 	struct pipe_file *pipe_file = vnode->v_data;
+	int open_ends = 2;
 
 	UK_ASSERT(vfscore_file->f_dentry->d_vnode == vnode);
 	UK_ASSERT(vnode->v_refcnt == 1);
 
 	if (vfscore_file->f_flags & UK_FREAD)
 		pipe_file->r_refcount--;
+	if (!pipe_file->r_refcount) {
+		pipe_buf_close_read(pipe_file->buf);
+		open_ends--;
+	}
 
 	if (vfscore_file->f_flags & UK_FWRITE)
 		pipe_file->w_refcount--;
+	if (!pipe_file->w_refcount) {
+		pipe_buf_close_write(pipe_file->buf);
+		open_ends--;
+	}
 
-	if (!pipe_file->r_refcount && !pipe_file->w_refcount)
+	if (open_ends == 0)
 		pipe_file_free(pipe_file);
 
 	return 0;
@@ -145,9 +154,7 @@ static int pipe_ioctl(struct vnode *vnode,
 
 	switch (com) {
 	case FIONREAD:
-		uk_mutex_lock(&pipe_buf->rdlock);
 		*((int *) data) = pipe_buf_get_available(pipe_buf);
-		uk_mutex_unlock(&pipe_buf->rdlock);
 		return 0;
 	default:
 		return -EINVAL;

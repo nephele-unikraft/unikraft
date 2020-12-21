@@ -33,12 +33,13 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <uk/plat/clone.h>
 #include "pipe_buf.h"
 
 
 #define PIPE_BUF_IDX(buf, n)    ((n) & ((buf)->capacity - 1))
-#define PIPE_BUF_PROD_IDX(buf)  PIPE_BUF_IDX((buf), (buf)->prod)
-#define PIPE_BUF_CONS_IDX(buf)  PIPE_BUF_IDX((buf), (buf)->cons)
+#define PIPE_BUF_PROD_IDX(buf)  PIPE_BUF_IDX((buf), (buf)->shared->prod)
+#define PIPE_BUF_CONS_IDX(buf)  PIPE_BUF_IDX((buf), (buf)->shared->cons)
 
 
 struct pipe_buf *pipe_buf_alloc(int capacity)
@@ -47,32 +48,60 @@ struct pipe_buf *pipe_buf_alloc(int capacity)
 
 	UK_ASSERT(POWER_OF_2(capacity));
 
-	pipe_buf = malloc(sizeof(*pipe_buf));
+	pipe_buf = calloc(1, sizeof(*pipe_buf));
 	if (!pipe_buf)
 		return NULL;
 
-	pipe_buf->data = malloc(capacity);
-	if (!pipe_buf->data) {
+	pipe_buf->shared = uk_plat_shmem_alloc(sizeof(struct pipe_buf_shared)
+			+ capacity);
+	if (!pipe_buf->shared) {
 		free(pipe_buf);
 		return NULL;
 	}
 
+	pipe_buf->data = (char *) (pipe_buf->shared + 1);
 	pipe_buf->capacity = capacity;
-	pipe_buf->cons = 0;
-	pipe_buf->prod = 0;
-	uk_mutex_init(&pipe_buf->rdlock);
-	uk_mutex_init(&pipe_buf->wrlock);
-	uk_waitq_init(&pipe_buf->rdwq);
-	uk_waitq_init(&pipe_buf->wrwq);
-	pipe_buf->refcount = 0;
+	pipe_buf->shared->cons = 0;
+	pipe_buf->shared->prod = 0;
+	uk_mutex_init(&pipe_buf->shared->rdlock);
+	uk_mutex_init(&pipe_buf->shared->wrlock);
+	pipe_buf->rdntfr = ukplat_notifier_create();
+	if (!pipe_buf->rdntfr)
+		goto out_err;
+	pipe_buf->wrntfr = ukplat_notifier_create();
+	if (!pipe_buf->wrntfr)
+		goto out_err;
 
 	return pipe_buf;
+
+out_err:
+	pipe_buf_free(pipe_buf);
+	return NULL;
+}
+
+void pipe_buf_close_read(struct pipe_buf *pipe_buf)
+{
+	if (pipe_buf->rdntfr) {
+		ukplat_notifier_destroy(pipe_buf->rdntfr);
+		pipe_buf->rdntfr = NULL;
+	}
+}
+
+void pipe_buf_close_write(struct pipe_buf *pipe_buf)
+{
+	if (pipe_buf->wrntfr) {
+		ukplat_notifier_destroy(pipe_buf->wrntfr);
+		pipe_buf->wrntfr = NULL;
+	}
 }
 
 void pipe_buf_free(struct pipe_buf *pipe_buf)
 {
 	if (pipe_buf->refcount == 0) {
-		free(pipe_buf->data);
+		pipe_buf_close_read(pipe_buf);
+		pipe_buf_close_write(pipe_buf);
+		if (pipe_buf->shared)
+			uk_plat_shmem_free(pipe_buf->shared);
 		free(pipe_buf);
 	}
 }
@@ -110,7 +139,7 @@ static unsigned long pipe_buf_write_iovec(struct pipe_buf *pipe_buf,
 	}
 
 	/* Update producer */
-	pipe_buf->prod += to_write;
+	pipe_buf->shared->prod += to_write;
 
 out:
 	return to_write;
@@ -137,7 +166,7 @@ static unsigned long pipe_buf_read_iovec(struct pipe_buf *pipe_buf,
 		int second_copy_bytes;
 
 		/* Copy the first part */
-		first_copy_bytes = pipe_buf->capacity - pipe_buf->cons;
+		first_copy_bytes = pipe_buf->capacity - pipe_buf->shared->cons;
 		memcpy(iovec_data,
 				pipe_buf->data + cons_idx,
 				first_copy_bytes);
@@ -150,7 +179,7 @@ static unsigned long pipe_buf_read_iovec(struct pipe_buf *pipe_buf,
 	}
 
 	/* Update consumer */
-	pipe_buf->cons += to_read;
+	pipe_buf->shared->cons += to_read;
 
 out:
 	return to_read;
@@ -162,7 +191,7 @@ int pipe_buf_write(struct pipe_buf *pipe_buf, struct uio *buf,
 	bool data_available = true;
 	int uio_idx = 0;
 
-	uk_mutex_lock(&pipe_buf->wrlock);
+	uk_mutex_lock(&pipe_buf->shared->wrlock);
 	while (data_available && uio_idx < buf->uio_iovcnt) {
 		struct iovec *iovec = &buf->uio_iov[uio_idx];
 		unsigned long off = 0;
@@ -180,10 +209,9 @@ int pipe_buf_write(struct pipe_buf *pipe_buf, struct uio *buf,
 				} else {
 					/* Wait until data available */
 					while (!pipe_buf_can_write(pipe_buf)) {
-						uk_mutex_unlock(&pipe_buf->wrlock);
-						uk_waitq_wait_event(&pipe_buf->wrwq,
-							pipe_buf_can_write(pipe_buf));
-						uk_mutex_lock(&pipe_buf->wrlock);
+						uk_mutex_unlock(&pipe_buf->shared->wrlock);
+						ukplat_wait(pipe_buf->wrntfr);
+						uk_mutex_lock(&pipe_buf->shared->wrlock);
 					}
 				}
 
@@ -194,13 +222,13 @@ int pipe_buf_write(struct pipe_buf *pipe_buf, struct uio *buf,
 				off += written_bytes;
 
 				/* wake some readers */
-				uk_waitq_wake_up(&pipe_buf->rdwq);
+				ukplat_notify(pipe_buf->rdntfr);
 			}
 		}
 
 		uio_idx++;
 	}
-	uk_mutex_unlock(&pipe_buf->wrlock);
+	uk_mutex_unlock(&pipe_buf->shared->wrlock);
 
 	return 0;
 }
@@ -210,9 +238,9 @@ int pipe_buf_read(struct pipe_buf *pipe_buf, struct uio *buf, bool nonblocking)
 	bool data_available = true;
 	int uio_idx = 0;
 
-	uk_mutex_lock(&pipe_buf->rdlock);
+	uk_mutex_lock(&pipe_buf->shared->rdlock);
 	if (nonblocking && !pipe_buf_can_read(pipe_buf)) {
-		uk_mutex_unlock(&pipe_buf->rdlock);
+		uk_mutex_unlock(&pipe_buf->shared->rdlock);
 		return EAGAIN;
 	}
 
@@ -233,10 +261,9 @@ int pipe_buf_read(struct pipe_buf *pipe_buf, struct uio *buf, bool nonblocking)
 				} else {
 					/* Wait until data available */
 					while (!pipe_buf_can_read(pipe_buf)) {
-						uk_mutex_unlock(&pipe_buf->rdlock);
-						uk_waitq_wait_event(&pipe_buf->rdwq,
-							pipe_buf_can_read(pipe_buf));
-						uk_mutex_lock(&pipe_buf->rdlock);
+						uk_mutex_unlock(&pipe_buf->shared->rdlock);
+						ukplat_wait(pipe_buf->rdntfr);
+						uk_mutex_lock(&pipe_buf->shared->rdlock);
 					}
 				}
 
@@ -247,13 +274,13 @@ int pipe_buf_read(struct pipe_buf *pipe_buf, struct uio *buf, bool nonblocking)
 				off += read_bytes;
 
 				/* wake some writers */
-				uk_waitq_wake_up(&pipe_buf->wrwq);
+				ukplat_notify(pipe_buf->wrntfr);
 			}
 		}
 
 		uio_idx++;
 	}
-	uk_mutex_unlock(&pipe_buf->rdlock);
+	uk_mutex_unlock(&pipe_buf->shared->rdlock);
 
 	return 0;
 }
