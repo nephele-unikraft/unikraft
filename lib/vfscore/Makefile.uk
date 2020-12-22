@@ -3,7 +3,10 @@ $(eval $(call addlib_s,libvfscore,$(CONFIG_LIBVFSCORE)))
 # Register to uklibparam, sets "vfs" as parameter prefix (vfs.*)
 $(eval $(call addlib_paramprefix,libvfscore,vfs))
 
-CINCLUDES-y += -I$(LIBVFSCORE_BASE)/include
+LIBVFSCORE_COMMON_INCLUDES-y     += -I$(LIBVFSCORE_BASE)/include
+LIBVFSCORE_COMMON_INCLUDES-y     += -I$(LIBVFSCORE_BASE)/musl-imported/include
+CINCLUDES-$(CONFIG_LIBVFSCORE)   += $(LIBVFSCORE_COMMON_INCLUDES-y)
+CXXINCLUDES-$(CONFIG_LIBVFSCORE) += $(LIBVFSCORE_COMMON_INCLUDES-y)
 
 LIBVFSCORE_CFLAGS-$(call gcc_version_ge,8,0) += -Wno-cast-function-type
 
