@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <vfscore/file.h>
+#include <vfscore/fs.h>
 #include "vfs.h"
 
 #include <uk/assert.h>
@@ -116,6 +117,62 @@ int vfs_write(struct vfscore_file *fp, struct uio *uio, int flags)
 
 	vn_unlock(vp);
 	return error;
+}
+
+int vfs_can_read(struct vfscore_file *fp)
+{
+	struct vnode *vp;
+	int rc = 0;
+
+	if ((fp->f_flags & UK_FREAD) == 0)
+		goto out;
+
+	vp = fp->f_dentry->d_vnode;
+	vn_lock(vp);
+	rc = VOP_CAN_READ(vp, fp);
+	vn_unlock(vp);
+out:
+	return rc;
+}
+
+int vfs_can_write(struct vfscore_file *fp)
+{
+	struct vnode *vp;
+	int rc = 0;
+
+	if ((fp->f_flags & UK_FWRITE) == 0)
+		goto out;
+
+	vp = fp->f_dentry->d_vnode;
+	vn_lock(vp);
+	rc = VOP_CAN_WRITE(vp, fp);
+	vn_unlock(vp);
+out:
+	return rc;
+}
+
+int vfs_poll_register(struct vfscore_file *fp, struct vfscore_poll *poll)
+{
+	struct vnode *vp;
+	int rc;
+
+	vp = fp->f_dentry->d_vnode;
+	vn_lock(vp);
+	rc = VOP_POLL_REGISTER(vp, fp, poll);
+	vn_unlock(vp);
+	return rc;
+}
+
+int vfs_poll_unregister(struct vfscore_file *fp, struct vfscore_poll *poll)
+{
+	struct vnode *vp;
+	int rc;
+
+	vp = fp->f_dentry->d_vnode;
+	vn_lock(vp);
+	rc = VOP_POLL_UNREGISTER(vp, fp, poll);
+	vn_unlock(vp);
+	return rc;
 }
 
 int vfs_ioctl(struct vfscore_file *fp, unsigned long com, void *data)

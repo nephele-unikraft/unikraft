@@ -41,6 +41,7 @@
 #include <time.h>
 #include <vfscore/uio.h>
 #include <vfscore/dentry.h>
+#include <vfscore/poll.h>
 
 struct vfsops;
 struct vnops;
@@ -150,6 +151,12 @@ typedef	int (*vnop_close_t)	(struct vnode *, struct vfscore_file *);
 typedef	int (*vnop_read_t)	(struct vnode *, struct vfscore_file *,
 				 struct uio *, int);
 typedef	int (*vnop_write_t)	(struct vnode *, struct uio *, int);
+typedef	int (*vnop_can_read_t)	(struct vnode *, struct vfscore_file *);
+typedef	int (*vnop_can_write_t)	(struct vnode *, struct vfscore_file *);
+typedef	int (*vnop_poll_register_t)	(struct vnode *, struct vfscore_file *,
+					 struct vfscore_poll *);
+typedef	int (*vnop_poll_unregister_t)	(struct vnode *, struct vfscore_file *,
+					 struct vfscore_poll *);
 typedef	int (*vnop_seek_t)	(struct vnode *, struct vfscore_file *,
 				 off_t, off_t);
 typedef	int (*vnop_ioctl_t)	(struct vnode *, struct vfscore_file *, unsigned long, void *);
@@ -180,6 +187,10 @@ struct vnops {
 	vnop_close_t		vop_close;
 	vnop_read_t		vop_read;
 	vnop_write_t		vop_write;
+	vnop_can_read_t		vop_can_read;
+	vnop_can_write_t	vop_can_write;
+	vnop_poll_register_t	vop_poll_register;
+	vnop_poll_unregister_t	vop_poll_unregister;
 	vnop_seek_t		vop_seek;
 	vnop_ioctl_t		vop_ioctl;
 	vnop_fsync_t		vop_fsync;
@@ -209,6 +220,10 @@ struct vnops {
 #define VOP_READ(VP, FP, U, F)	   ((VP)->v_op->vop_read)(VP, FP, U, F)
 #define VOP_CACHE(VP, FP, U)	   ((VP)->v_op->vop_cache)(VP, FP, U)
 #define VOP_WRITE(VP, U, F)	   ((VP)->v_op->vop_write)(VP, U, F)
+#define VOP_CAN_READ(VP, FP)	   ((VP)->v_op->vop_can_read)(VP, FP)
+#define VOP_CAN_WRITE(VP, FP)	   ((VP)->v_op->vop_can_write)(VP, FP)
+#define VOP_POLL_REGISTER(VP, FP, P)   ((VP)->v_op->vop_poll_register)(VP, FP, P)
+#define VOP_POLL_UNREGISTER(VP, FP, P) ((VP)->v_op->vop_poll_unregister)(VP, FP, P)
 #define VOP_SEEK(VP, FP, OLD, NEW) ((VP)->v_op->vop_seek)(VP, FP, OLD, NEW)
 #define VOP_IOCTL(VP, FP, C, A)	   ((VP)->v_op->vop_ioctl)(VP, FP, C, A)
 #define VOP_FSYNC(VP, FP)	   ((VP)->v_op->vop_fsync)(VP, FP)

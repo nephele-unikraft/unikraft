@@ -135,3 +135,4 @@ scandir
 socketpair_af_local
 sendmsg
 recvmsg
+select
