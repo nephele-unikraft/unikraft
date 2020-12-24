@@ -4,6 +4,7 @@
 extern "C" {
 #endif
 
+#if 0
 #include <features.h>
 
 #define __NEED_size_t
@@ -14,6 +15,7 @@ extern "C" {
 #define __NEED_sigset_t
 
 #include <bits/alltypes.h>
+#endif
 
 #define FD_SETSIZE 1024
 
@@ -29,7 +31,7 @@ typedef struct {
 #define FD_ISSET(d, s) !!((s)->fds_bits[(d)/(8*sizeof(long))] & (1UL<<((d)%(8*sizeof(long)))))
 
 int select (int, fd_set *__restrict, fd_set *__restrict, fd_set *__restrict, struct timeval *__restrict);
-int pselect (int, fd_set *__restrict, fd_set *__restrict, fd_set *__restrict, const struct timespec *__restrict, const sigset_t *__restrict);
+/* TODO int pselect (int, fd_set *__restrict, fd_set *__restrict, fd_set *__restrict, const struct timespec *__restrict, const sigset_t *__restrict); */
 
 #if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
 #define NFDBITS (8*(int)sizeof(long))
