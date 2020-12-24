@@ -39,4 +39,8 @@ int ukplat_clone(unsigned int nr_children, unsigned short *child_ids);
 
 int ukplat_get_domain_id(void);
 
+
+void *uk_plat_shmem_alloc(int capacity);
+int uk_plat_shmem_free(void *map);
+
 #endif /* __UKPLAT_CLONE__ */
