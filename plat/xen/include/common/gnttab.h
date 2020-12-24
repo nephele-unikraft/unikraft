@@ -38,6 +38,8 @@
 void gnttab_init(void);
 void gnttab_fini(void);
 
+int gnttab_alloc_and_grant_multi(void **map, unsigned long pages_num,
+		struct uk_alloc *a, domid_t domid, int readonly, grant_ref_t grefs[]);
 grant_ref_t gnttab_alloc_and_grant(void **map, struct uk_alloc *a);
 grant_ref_t gnttab_grant_access(domid_t domid, unsigned long pfn,
 				int readonly);

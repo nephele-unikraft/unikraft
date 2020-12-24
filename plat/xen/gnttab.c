@@ -210,23 +210,48 @@ unsigned long gnttab_end_transfer(grant_ref_t gref)
 	return frame;
 }
 
-grant_ref_t gnttab_alloc_and_grant(void **map, struct uk_alloc *a)
+int gnttab_alloc_and_grant_multi(void **map, unsigned long pages_num,
+		struct uk_alloc *a, domid_t domid, int readonly, grant_ref_t grefs[])
 {
 	void *page;
 	unsigned long mfn;
-	grant_ref_t gref;
+	int i, j, rc = 0;
 
 	UK_ASSERT(map != NULL);
 	UK_ASSERT(a != NULL);
 
-	page = uk_palloc(a, 1);
-	if (page == NULL)
-		return GRANT_INVALID_REF;
+	page = uk_palloc(a, pages_num);
+	if (page == NULL) {
+		rc = -ENOMEM;
+		goto out;
+	}
 
-	mfn = virt_to_mfn(page);
-	gref = gnttab_grant_access(0, mfn, 0);
+	for (i = 0; i < (int) pages_num; i++) {
+		mfn = virt_to_mfn(page);
+		grefs[i] = gnttab_grant_access(domid, mfn, readonly);
+		if (grefs[i] == GRANT_INVALID_REF) {
+			/* rollback */
+			for (j = 0; j < i; j++)
+				gnttab_end_access(grefs[i]);
+			uk_pfree(a, page, pages_num);
+			page = NULL;
+			goto out;
+		}
+	}
 
 	*map = page;
+out:
+	return rc;
+}
+
+grant_ref_t gnttab_alloc_and_grant(void **map, struct uk_alloc *a)
+{
+	grant_ref_t gref;
+	int rc;
+
+	rc = gnttab_alloc_and_grant_multi(map, 1, a, 0, 0, &gref);
+	if (rc)
+		gref = GRANT_INVALID_REF;
 
 	return gref;
 }
