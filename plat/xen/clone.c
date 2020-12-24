@@ -37,6 +37,7 @@
 #include <uk/plat/clone.h>
 #include <common/hypervisor.h>
 #include <common/gnttab.h>
+#include <common/events.h>
 #if defined(__x86_64__)
 #include <xen-x86/irq.h>
 #include <xen-x86/mm.h>
@@ -191,6 +192,150 @@ int uk_plat_shmem_free(void *map)
 	}
 
 	uk_plat_shmem_destroy(shmem);
+out:
+	return rc;
+}
+
+struct ukplat_notifier {
+	evtchn_port_t evtchn;
+	struct uk_waitq wq;
+	bool spurious_handled;
+	bool triggered;
+};
+
+static void notifier_handler(evtchn_port_t evtchn,
+			    struct __regs *regs __unused,
+			    void *arg)
+{
+	struct ukplat_notifier *ntfr = arg;
+
+	UK_ASSERT(ntfr);
+	UK_ASSERT(ntfr->evtchn == evtchn);
+
+	if (!ntfr->spurious_handled) {
+		//TODO mask_evtchn(ntfr->evtchn);
+		ntfr->spurious_handled = true;
+		return;
+	}
+
+	UK_WRITE_ONCE(ntfr->triggered, true);
+	uk_waitq_wake_up(&ntfr->wq);
+}
+
+struct ukplat_notifier *ukplat_notifier_create(void)
+{
+	struct ukplat_notifier *ntfr = NULL;
+	int rc = 0;
+
+	ntfr = malloc(sizeof(struct ukplat_notifier));
+	if (!ntfr)
+		goto out;
+
+	rc = evtchn_alloc_unbound(DOMID_CHILD, notifier_handler, ntfr,
+			&ntfr->evtchn);
+	if (rc) {
+		uk_pr_err("Error calling evtchn_alloc_unbound() rc=%d\n", rc);
+		goto out;
+	}
+
+	uk_waitq_init(&ntfr->wq);
+	ntfr->spurious_handled = false;
+	ntfr->triggered = false;
+	unmask_evtchn(ntfr->evtchn);
+
+out:
+	if (rc) {
+		free(ntfr);
+		ntfr = NULL;
+	}
+	return ntfr;
+}
+
+int ukplat_notifier_destroy(struct ukplat_notifier *ntfr)
+{
+	int rc = 0;
+
+	if (!ntfr) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	unbind_evtchn(ntfr->evtchn);
+	free(ntfr);
+out:
+	return rc;
+}
+
+int ukplat_wait(struct ukplat_notifier *ntfr)
+{
+	int rc = 0;
+
+	if (!ntfr) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	unmask_evtchn(ntfr->evtchn);
+	uk_waitq_wait_event(&ntfr->wq, UK_READ_ONCE(ntfr->triggered));
+	mask_evtchn(ntfr->evtchn);
+	UK_WRITE_ONCE(ntfr->triggered, false);
+out:
+	return rc;
+}
+
+int ukplat_add_waiter(struct ukplat_notifier *ntfr,
+		struct uk_waitq_entry *waiter)
+{
+	unsigned long flags;
+	int rc = 0;
+
+	if (!ntfr) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	flags = ukplat_lcpu_save_irqf();
+	uk_waitq_add(&ntfr->wq, waiter);
+	ukplat_lcpu_restore_irqf(flags);
+	unmask_evtchn(ntfr->evtchn);//TODO
+out:
+	return rc;
+}
+
+int ukplat_remove_waiter(struct ukplat_notifier *ntfr,
+		struct uk_waitq_entry *waiter)
+{
+	unsigned long flags;
+	int rc = 0;
+
+	if (!ntfr) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	flags = ukplat_lcpu_save_irqf();
+	uk_waitq_remove(&ntfr->wq, waiter);
+	ukplat_lcpu_restore_irqf(flags);
+out:
+	return rc;
+}
+
+int ukplat_notify(struct ukplat_notifier *ntfr)
+{
+	int rc = 0;
+
+	if (!ntfr) {
+		rc = -EINVAL;
+		goto out;
+	}
+
+	rc = notify_remote_via_evtchn(ntfr->evtchn);
+	if (rc) {
+		uk_pr_err("Error calling notify_remote_via_evtchn() rc=%d\n", rc);
+		goto out;
+	}
+
+	uk_waitq_wake_up(&ntfr->wq);
 out:
 	return rc;
 }

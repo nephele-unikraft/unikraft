@@ -43,4 +43,15 @@ int ukplat_get_domain_id(void);
 void *uk_plat_shmem_alloc(int capacity);
 int uk_plat_shmem_free(void *map);
 
+
+struct ukplat_notifier *ukplat_notifier_create(void);
+int ukplat_notifier_destroy(struct ukplat_notifier *ntfr);
+
+int ukplat_wait(struct ukplat_notifier *ntfr);
+int ukplat_add_waiter(struct ukplat_notifier *ntfr,
+		struct uk_waitq_entry *waiter);
+int ukplat_remove_waiter(struct ukplat_notifier *ntfr,
+		struct uk_waitq_entry *waiter);
+int ukplat_notify(struct ukplat_notifier *ntfr);
+
 #endif /* __UKPLAT_CLONE__ */
