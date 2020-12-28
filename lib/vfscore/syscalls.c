@@ -398,6 +398,14 @@ sys_ioctl(struct vfscore_file *fp, unsigned long request, void *buf)
 	case FIONCLEX:
 		fp->f_flags &= ~O_CLOEXEC;
 		break;
+	case FIONBIO:
+		if (!buf)
+			return EINVAL;
+		if (*(int *) buf)
+			fp->f_flags |= O_NONBLOCK;
+		else
+			fp->f_flags &= ~O_NONBLOCK;
+		break;
 	default:
 		error = vfs_ioctl(fp, request, buf);
 		break;
