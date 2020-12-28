@@ -165,6 +165,10 @@ static struct vnops stdio_vnops = {
 	stdio_close,		/* close */
 	stdio_read,		/* read */
 	stdio_write,		/* write */
+	(vnop_can_read_t) NULL,
+	(vnop_can_write_t) NULL,
+	(vnop_poll_register_t) NULL,
+	(vnop_poll_unregister_t) NULL,
 	stdio_seek,		/* seek */
 	stdio_ioctl,		/* ioctl */
 	stdio_fsync,		/* fsync */

@@ -35,10 +35,12 @@
 
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#include <uk/plat/clone.h>
 #include <vfscore/file.h>
 #include <vfscore/fs.h>
 #include <vfscore/mount.h>
 #include <vfscore/vnode.h>
+#include <vfscore/poll.h>
 #include "pipe_buf.h"
 
 
@@ -106,6 +108,80 @@ static int pipe_read(struct vnode *vnode,
 	bool nonblocking = (vfscore_file->f_flags & O_NONBLOCK);
 
 	return pipe_buf_read(pipe_buf, buf, nonblocking);
+}
+
+static int pipe_can_read(struct vnode *vnode,
+		struct vfscore_file *vfscore_file __unused)
+{
+	struct pipe_file *pipe_file = vnode->v_data;
+	struct pipe_buf *pipe_buf = pipe_file->buf;
+
+	return pipe_buf_can_read(pipe_buf);
+}
+
+static int pipe_can_write(struct vnode *vnode,
+		struct vfscore_file *vfscore_file __unused)
+{
+	struct pipe_file *pipe_file = vnode->v_data;
+	struct pipe_buf *pipe_buf = pipe_file->buf;
+
+	return pipe_buf_can_write(pipe_buf);
+}
+
+static int pipe_poll_register(struct vnode *vnode,
+		struct vfscore_file *vfscore_file,
+		struct vfscore_poll *poll)
+{
+	struct pipe_file *pipe_file = vnode->v_data;
+	struct pipe_buf *pipe_buf = pipe_file->buf;
+	int rc;
+
+	if (poll->events | POLLIN) {
+		if ((vfscore_file->f_flags & UK_FREAD) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_add_waiter(pipe_buf->rdntfr, &poll->waiter);
+
+	} else if (poll->events | POLLOUT) {
+		if ((vfscore_file->f_flags & UK_FWRITE) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_add_waiter(pipe_buf->wrntfr, &poll->waiter);
+
+	} else
+		rc = -EINVAL;
+out:
+	return rc;
+}
+
+static int pipe_poll_unregister(struct vnode *vnode,
+		struct vfscore_file *vfscore_file,
+		struct vfscore_poll *poll)
+{
+	struct pipe_file *pipe_file = vnode->v_data;
+	struct pipe_buf *pipe_buf = pipe_file->buf;
+	int rc;
+
+	if (poll->events | POLLIN) {
+		if ((vfscore_file->f_flags & UK_FREAD) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_remove_waiter(pipe_buf->rdntfr, &poll->waiter);
+
+	} else if (poll->events | POLLOUT) {
+		if ((vfscore_file->f_flags & UK_FWRITE) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_remove_waiter(pipe_buf->wrntfr, &poll->waiter);
+
+	} else
+		rc = -EINVAL;
+out:
+	return rc;
 }
 
 static int pipe_close(struct vnode *vnode,
@@ -185,6 +261,10 @@ static struct vnops pipe_vnops = {
 	.vop_close     = pipe_close,
 	.vop_read      = pipe_read,
 	.vop_write     = pipe_write,
+	.vop_can_read  = pipe_can_read,
+	.vop_can_write = pipe_can_write,
+	.vop_poll_register = pipe_poll_register,
+	.vop_poll_unregister = pipe_poll_unregister,
 	.vop_seek      = pipe_seek,
 	.vop_ioctl     = pipe_ioctl,
 	.vop_fsync     = pipe_fsync,

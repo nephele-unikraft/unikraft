@@ -115,6 +115,76 @@ static int sock_unix_read(struct vnode *vnode,
 	return pipe_buf_read(su_file->receiver, buf, nonblocking);
 }
 
+static int sock_unix_can_read(struct vnode *vnode,
+		struct vfscore_file *vfscore_file __unused)
+{
+	struct sock_unix_file *su_file = vnode->v_data;
+
+	return pipe_buf_can_read(su_file->receiver);
+}
+
+static int sock_unix_can_write(struct vnode *vnode,
+		struct vfscore_file *vfscore_file __unused)
+{
+	struct sock_unix_file *su_file = vnode->v_data;
+
+	return pipe_buf_can_write(su_file->sender);
+}
+
+static int sock_unix_poll_register(struct vnode *vnode,
+		struct vfscore_file *vfscore_file,
+		struct vfscore_poll *poll)
+{
+	struct sock_unix_file *su_file = vnode->v_data;
+	int rc;
+
+	if (poll->events | POLLIN) {
+		if ((vfscore_file->f_flags & UK_FREAD) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_add_waiter(su_file->receiver->rdntfr, &poll->waiter);
+
+	} else if (poll->events | POLLOUT) {
+		if ((vfscore_file->f_flags & UK_FWRITE) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_add_waiter(su_file->sender->wrntfr, &poll->waiter);
+
+	} else
+		rc = -EINVAL;
+out:
+	return rc;
+}
+
+static int sock_unix_poll_unregister(struct vnode *vnode,
+		struct vfscore_file *vfscore_file,
+		struct vfscore_poll *poll)
+{
+	struct sock_unix_file *su_file = vnode->v_data;
+	int rc;
+
+	if (poll->events | POLLIN) {
+		if ((vfscore_file->f_flags & UK_FREAD) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_remove_waiter(su_file->receiver->rdntfr, &poll->waiter);
+
+	} else if (poll->events | POLLOUT) {
+		if ((vfscore_file->f_flags & UK_FWRITE) == 0) {
+			rc = -EINVAL;
+			goto out;
+		}
+		rc = ukplat_remove_waiter(su_file->sender->wrntfr, &poll->waiter);
+
+	} else
+		rc = -EINVAL;
+out:
+	return rc;
+}
+
 static int sock_unix_close(struct vnode *vnode,
 		struct vfscore_file *vfscore_file)
 {
@@ -192,6 +262,10 @@ static struct vnops sock_unix_vnops = {
 	.vop_close     = sock_unix_close,
 	.vop_read      = sock_unix_read,
 	.vop_write     = sock_unix_write,
+	.vop_can_read  = sock_unix_can_read,
+	.vop_can_write = sock_unix_can_write,
+	.vop_poll_register = sock_unix_poll_register,
+	.vop_poll_unregister = sock_unix_poll_unregister,
 	.vop_seek      = sock_unix_seek,
 	.vop_ioctl     = sock_unix_ioctl,
 	.vop_fsync     = sock_unix_fsync,
