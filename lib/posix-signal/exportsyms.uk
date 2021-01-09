@@ -7,3 +7,6 @@ sigisemptyset
 sigismember
 sigorset
 strsignal
+
+sigcopyset
+sigreverseset
