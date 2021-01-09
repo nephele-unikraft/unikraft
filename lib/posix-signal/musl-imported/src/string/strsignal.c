@@ -1,6 +1,6 @@
 #include <signal.h>
 #include <string.h>
-#include "locale_impl.h"
+/* TODO #include "locale_impl.h" */
 
 #if (SIGHUP == 1) && (SIGINT == 2) && (SIGQUIT == 3) && (SIGILL == 4) \
  && (SIGTRAP == 5) && (SIGABRT == 6) && (SIGBUS == 7) && (SIGFPE == 8) \
@@ -102,6 +102,8 @@ static const char strings[] =
 	"\0RT121\0RT122\0RT123\0RT124\0RT125\0RT126\0RT127\0RT128"
 #endif
 	"";
+
+#define LCTRANS_CUR(s) (s)
 
 char *strsignal(int signum)
 {

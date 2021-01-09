@@ -14,3 +14,4 @@ LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigfi
 LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigismember.c
 LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigisemptyset.c
 LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigorset.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/string/strsignal.c

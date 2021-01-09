@@ -6,3 +6,4 @@ sigfillset
 sigisemptyset
 sigismember
 sigorset
+strsignal
