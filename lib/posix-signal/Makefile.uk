@@ -5,3 +5,12 @@ LIBPOSIX_SIGNAL_COMMON_INCLUDES-y     += -I$(LIBPOSIX_SIGNAL_BASE)/musl-imported
 LIBPOSIX_SIGNAL_COMMON_INCLUDES-$(CONFIG_ARCH_X86_64) += -I$(LIBPOSIX_SIGNAL_BASE)/musl-imported/arch/x86_64
 CINCLUDES-$(CONFIG_LIBPOSIX_SIGNAL)   += $(LIBPOSIX_SIGNAL_COMMON_INCLUDES-y)
 CXXINCLUDES-$(CONFIG_LIBPOSIX_SIGNAL) += $(LIBPOSIX_SIGNAL_COMMON_INCLUDES-y)
+
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigaddset.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigandset.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigdelset.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigemptyset.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigfillset.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigismember.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigisemptyset.c
+LIBPOSIX_SIGNAL_SRCS-y += $(LIBPOSIX_SIGNAL_BASE)/musl-imported/src/signal/sigorset.c

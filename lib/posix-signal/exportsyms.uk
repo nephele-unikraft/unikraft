@@ -1,0 +1,8 @@
+sigaddset
+sigandset
+sigdelset
+sigemptyset
+sigfillset
+sigisemptyset
+sigismember
+sigorset
