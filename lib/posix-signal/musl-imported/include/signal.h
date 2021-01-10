@@ -5,7 +5,10 @@
 extern "C" {
 #endif
 
-#include <features.h>
+/*#include <features.h>*/
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
  || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) \
@@ -25,7 +28,11 @@ extern "C" {
 #define __NEED_clock_t
 #define __NEED_sigset_t
 
-#include <bits/alltypes.h>
+#include <uk/arch/types.h>
+#include <uk/time_types.h>
+#include <uk/process_types.h>
+#include <uk/user_types.h>
+#include <uk/signal_types.h>
 
 #define SIG_BLOCK     0
 #define SIG_UNBLOCK   1
@@ -181,7 +188,7 @@ struct sigevent {
 	int sigev_signo;
 	int sigev_notify;
 	void (*sigev_notify_function)(union sigval);
-	pthread_attr_t *sigev_notify_attributes;
+	/*TODO pthread_attr_t *sigev_notify_attributes;*/
 	char __pad[56-3*sizeof(long)];
 };
 
@@ -212,8 +219,10 @@ int sigwaitinfo(const sigset_t *__restrict, siginfo_t *__restrict);
 int sigtimedwait(const sigset_t *__restrict, siginfo_t *__restrict, const struct timespec *__restrict);
 int sigqueue(pid_t, int, union sigval);
 
+#if 0
 int pthread_sigmask(int, const sigset_t *__restrict, sigset_t *__restrict);
 int pthread_kill(pthread_t, int);
+#endif
 
 void psiginfo(const siginfo_t *, const char *);
 void psignal(int, const char *);
