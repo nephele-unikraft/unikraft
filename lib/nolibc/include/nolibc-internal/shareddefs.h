@@ -75,6 +75,9 @@ typedef unsigned mode_t;
 #define __DEFINED_mode_t
 #endif
 
+#ifdef CONFIG_LIBPOSIX_USER
+#include <uk/user_types.h>
+#else
 #if defined(__NEED_uid_t) && !defined(__DEFINED_uid_t)
 typedef unsigned uid_t;
 #define __DEFINED_uid_t
@@ -83,6 +86,7 @@ typedef unsigned uid_t;
 #if defined(__NEED_gid_t) && !defined(__DEFINED_gid_t)
 typedef unsigned gid_t;
 #define __DEFINED_gid_t
+#endif
 #endif
 
 #if defined(__NEED_useconds_t) && !defined(__DEFINED_useconds_t)
