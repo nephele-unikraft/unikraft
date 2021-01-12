@@ -121,6 +121,9 @@ int uk_thread_init(struct uk_thread *thread,
 	uk_waitq_init(&thread->waiting_threads);
 	thread->sched = NULL;
 	thread->prv = NULL;
+#if CONFIG_LIBPOSIX_SIGNAL
+	uk_thread_signal_state_init(&thread->tss);
+#endif
 
 #ifdef CONFIG_LIBNEWLIBC
 	reent_init(&thread->reent);
@@ -135,6 +138,9 @@ int uk_thread_init(struct uk_thread *thread,
 void uk_thread_fini(struct uk_thread *thread, struct uk_alloc *allocator)
 {
 	UK_ASSERT(thread != NULL);
+#if CONFIG_LIBPOSIX_SIGNAL
+	uk_thread_signal_state_fini(&thread->tss);
+#endif
 	ukplat_thread_ctx_destroy(allocator, thread->ctx);
 }
 
@@ -243,4 +249,14 @@ int uk_thread_get_timeslice(const struct uk_thread *thread, int *timeslice)
 		return -EINVAL;
 
 	return uk_sched_thread_get_timeslice(thread->sched, thread, timeslice);
+}
+
+int uk_thread_signal(struct uk_thread *thread, int sig)
+{
+	int rc = -1;
+
+#if CONFIG_LIBPOSIX_SIGNAL
+	rc = uk_thread_signal_state_notify(&thread->tss, sig);
+#endif
+	return rc;
 }

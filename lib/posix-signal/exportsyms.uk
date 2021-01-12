@@ -10,3 +10,22 @@ strsignal
 
 sigcopyset
 sigreverseset
+
+# signal.h
+sigaction
+signal
+sigprocmask
+sigpending
+sigsuspend
+pause
+sigwait
+kill
+killpg
+raise
+__libc_current_sigrtmin
+__libc_current_sigrtmax
+
+uk_thread_signal_state_init
+uk_thread_signal_state_fini
+uk_thread_signal_state_notify
+uk_thread_signal_state_current_handle_pending

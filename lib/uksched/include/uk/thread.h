@@ -36,6 +36,9 @@
 #include <uk/arch/lcpu.h>
 #include <uk/arch/time.h>
 #include <uk/plat/thread.h>
+#if CONFIG_LIBPOSIX_SIGNAL
+#include <uk/signal.h>
+#endif
 #include <uk/thread_attr.h>
 #include <uk/wait_types.h>
 #include <uk/list.h>
@@ -59,6 +62,9 @@ struct uk_thread {
 	struct uk_waitq waiting_threads;
 	struct uk_sched *sched;
 	void *prv;
+#if CONFIG_LIBPOSIX_SIGNAL
+	struct uk_thread_signal_state tss;
+#endif
 #ifdef CONFIG_LIBNEWLIBC
 	struct _reent reent;
 #endif
@@ -83,6 +89,8 @@ int uk_thread_get_prio(const struct uk_thread *thread, prio_t *prio);
 
 int uk_thread_set_timeslice(struct uk_thread *thread, int timeslice);
 int uk_thread_get_timeslice(const struct uk_thread *thread, int *timeslice);
+
+int uk_thread_signal(struct uk_thread *thread, int sig);
 
 static inline
 struct uk_thread *uk_thread_current(void)
