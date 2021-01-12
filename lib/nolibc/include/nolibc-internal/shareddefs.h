@@ -94,9 +94,13 @@ typedef unsigned useconds_t;
 #define __DEFINED_useconds_t
 #endif
 
+#ifdef CONFIG_LIBPOSIX_PROCESS
+#include <uk/process_types.h>
+#else
 #if defined(__NEED_pid_t) && !defined(__DEFINED_pid_t)
 typedef int pid_t;
 #define __DEFINED_pid_t
+#endif
 #endif
 
 #if defined(__NEED_id_t) && !defined(__DEFINED_id_t)
