@@ -125,6 +125,17 @@ int ukplat_memregion_get(int i, struct ukplat_memregion_desc *m)
 		m->name  = "bss";
 #endif
 		break;
+	case 7: /* initrd */
+		if (HYPERVISOR_start_info->mod_start) {
+			m->base  = _libxenplat_mrd[2].base;
+			m->len   = _libxenplat_mrd[2].len;
+			m->flags = (UKPLAT_MEMRF_INITRD | UKPLAT_MEMRF_WRITABLE);
+#if CONFIG_UKPLAT_MEMRNAME
+			m->name  = "initrd";
+#endif
+			break;
+		}
+		/* fall-through */
 	default:
 		if (i < 0 || i >= ukplat_memregion_count()) {
 			m->base  = __NULL;
@@ -135,7 +146,7 @@ int ukplat_memregion_get(int i, struct ukplat_memregion_desc *m)
 #endif
 			return -1;
 		} else {
-			memcpy(m, &_libxenplat_mrd[i - 7], sizeof(*m));
+			memcpy(m, &_libxenplat_mrd[i - 8], sizeof(*m));
 		}
 		break;
 	}
