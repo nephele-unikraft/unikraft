@@ -492,6 +492,34 @@ ramfs_write(struct vnode *vp, struct uio *uio, int ioflag)
 			       uio);
 }
 
+static int ramfs_can_read(struct vnode *vnode __unused,
+		struct vfscore_file *vfscore_file __unused)
+{
+	return 1;
+}
+
+static int ramfs_can_write(struct vnode *vnode __unused,
+		struct vfscore_file *vfscore_file __unused)
+{
+	return 1;
+}
+
+static int ramfs_poll_register(struct vnode *vnode __unused,
+		struct vfscore_file *vfscore_file __unused,
+		struct vfscore_poll *poll __unused)
+{
+	UK_CRASH("No need for polling ramfs.");
+	return -1;
+}
+
+static int ramfs_poll_unregister(struct vnode *vnode __unused,
+		struct vfscore_file *vfscore_file __unused,
+		struct vfscore_poll *poll __unused)
+{
+	UK_CRASH("No need for polling ramfs.");
+	return -1;
+}
+
 static int
 ramfs_rename(struct vnode *dvp1, struct vnode *vp1, char *name1 __unused,
 			 struct vnode *dvp2, struct vnode *vp2, char *name2)
@@ -652,6 +680,10 @@ struct vnops ramfs_vnops = {
 		ramfs_close,            /* close */
 		ramfs_read,             /* read */
 		ramfs_write,            /* write */
+		ramfs_can_read,
+		ramfs_can_write,
+		ramfs_poll_register,
+		ramfs_poll_unregister,
 		ramfs_seek,             /* seek */
 		ramfs_ioctl,            /* ioctl */
 		ramfs_fsync,            /* fsync */
