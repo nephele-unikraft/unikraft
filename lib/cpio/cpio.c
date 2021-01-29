@@ -221,7 +221,7 @@ static enum cpio_error read_section(struct cpio_header **header_ptr,
 	return CPIO_SUCCESS;
 }
 
-enum cpio_error cpio_extract(char *mount_loc, void *memory_region, size_t len)
+static enum cpio_error cpio_extract(char *mount_loc, void *memory_region, size_t len)
 {
 	enum cpio_error error = CPIO_SUCCESS;
 	struct cpio_header *header = (struct cpio_header *)(memory_region);
@@ -236,4 +236,26 @@ enum cpio_error cpio_extract(char *mount_loc, void *memory_region, size_t len)
 		header = *header_ptr;
 	}
 	return error;
+}
+
+int initrd_mount(void)
+{
+	struct ukplat_memregion_desc memregion_desc;
+	int initrd;
+	enum cpio_error error;
+
+	initrd = ukplat_memregion_find_initrd0(&memregion_desc);
+	if (initrd != -1) {
+		if (mount("", "/", "ramfs", 0, NULL) < 0)
+			return -CPIO_MOUNT_FAILED;
+
+		error = cpio_extract("/", memregion_desc.base, memregion_desc.len);
+		if (error < 0)
+			uk_pr_err("Failed to mount initrd\n");
+		else
+			uk_pr_info("Mounted initrd\n");
+
+		return error;
+	}
+	return -CPIO_NO_MEMREGION;
 }

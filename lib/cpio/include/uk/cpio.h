@@ -53,5 +53,6 @@ enum cpio_error {
 	CPIO_NO_MOUNT_LOCATION
 };
 
-enum cpio_error cpio_extract(char *loc, void *mem, size_t len);
+int initrd_mount(void);
+
 #endif /*__CPIO_H__*/

@@ -75,6 +75,8 @@ UK_LIB_PARAM(rootflags, __u64);
 
 static int vfscore_rootfs(void)
 {
+	int rc;
+
 	/*
 	 * Initialization of the root filesystem '/'
 	 * NOTE: Any additional sub mount points (like '/dev' with devfs)
@@ -82,36 +84,33 @@ static int vfscore_rootfs(void)
 	 */
 	if (!rootfs || rootfs[0] == '\0') {
 		uk_pr_crit("Parameter 'vfs.rootfs' is invalid\n");
-		return -1;
+		rc = -1;
+		goto out;
 	}
 
 #ifdef CONFIG_LIBINITRAMFS
-	struct ukplat_memregion_desc memregion_desc;
-	int initrd;
-	enum cpio_error error;
-
-	initrd = ukplat_memregion_find_initrd0(&memregion_desc);
-	if (initrd != -1) {
-		ukplat_memregion_get(initrd, &memregion_desc);
-		if (mount("", "/", "ramfs", 0, NULL) < 0)
-			return -CPIO_MOUNT_FAILED;
-
-		error =
-		    cpio_extract("/", memregion_desc.base, memregion_desc.len);
-		if (error < 0)
-			uk_pr_err("Failed to mount initrd\n");
-		return error;
-	}
-	uk_pr_err("Failed to mount initrd\n");
-	return -CPIO_NO_MEMREGION;
-#else
-	uk_pr_info("Mount %s to /...\n", rootfs);
-	if (mount(rootdev, "/", rootfs, rootflags, rootopts) != 0) {
-		uk_pr_crit("Failed to mount /: %d\n", errno);
-		return -1;
+	rc = initrd_mount();
+	if (rc == CPIO_SUCCESS) {
+		rc = 0;
+		goto out;
+	} else if (rc != -CPIO_NO_MEMREGION) {
+		uk_pr_crit("Failed to mount initrd on /: %d\n", errno);
+		rc = -1;
+		goto out;
 	}
 #endif
-	return 0;
+
+#ifdef CONFIG_LIB9PFS
+	rootfs = "9pfs";
+	uk_pr_info("Mount %s (rootdev=%s) to /...\n", rootfs, rootdev);
+	rc = mount(rootdev, "/", rootfs, rootflags, rootopts);
+	if (rc != 0) {
+		uk_pr_crit("Failed to mount /: errno=%d rc=%d\n", errno, rc);
+		goto out;
+	}
+#endif
+out:
+	return rc;
 }
 
 uk_rootfs_initcall_prio(vfscore_rootfs, 4);
