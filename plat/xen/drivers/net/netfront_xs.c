@@ -356,6 +356,26 @@ static int netfront_xb_front_init(struct netfront_dev *nfdev,
 	if (rc < 0)
 		goto out;
 
+	rc = xs_printf(xbt, xendev->nodename, "feature-rx-notify", "%d", 1);
+	if (rc < 0)
+		goto out;
+
+	rc = xs_printf(xbt, xendev->nodename, "feature-sg", "%d", 1);
+	if (rc < 0)
+		goto out;
+
+	rc = xs_printf(xbt, xendev->nodename, "feature-gso-tcpv4", "%d", 1);
+	if (rc < 0)
+		goto out;
+
+	rc = xs_printf(xbt, xendev->nodename, "feature-gso-tcpv6", "1");
+	if (rc < 0)
+		goto out;
+
+	rc = xs_printf(xbt, xendev->nodename, "feature-ipv6-csum-offload", "1");
+	if (rc < 0)
+		goto out;
+
 	rc = 0;
 
 out:
