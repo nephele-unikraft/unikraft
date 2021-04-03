@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/unistd.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
@@ -148,11 +149,27 @@ int execle(const char *path, const char *arg, ...
 
 int execve(const char *path, char *const argv[], char *const envp[])
 {
+	struct stat s;
+	int rc;
+
 	uk_pr_warn("%s(): path=%s\n", __func__, path);
+	rc = stat(path, &s);
+	if (rc) {
+		errno = ENOENT;
+		rc = -1;
+		goto out;
+	}
+	if (!S_ISREG(s.st_mode)) {
+		errno = ENOENT;
+		rc = -1;
+		goto out;
+	}
+
 	exec_warn_argv(argv);
 	exec_warn_envp(envp);
 	errno = ENOSYS;
-	return -1;
+out:
+	return rc;
 }
 
 int execv(const char *path, char *const argv[])
