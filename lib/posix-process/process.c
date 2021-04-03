@@ -230,9 +230,9 @@ pid_t wait4(pid_t pid __unused, int *wstatus __unused, int options __unused,
 	return -1;
 }
 
-int getpid(void)
+pid_t getpid(void)
 {
-	return UNIKRAFT_PID;
+	return (pid_t) ukplat_get_domain_id();
 }
 
 pid_t getppid(void)
