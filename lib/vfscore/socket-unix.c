@@ -233,6 +233,8 @@ static int sock_unix_ioctl(struct vnode *vnode,
 	case FIONREAD:
 		*((int *) data) = pipe_buf_get_available(pipe_buf);
 		return 0;
+	case FIOASYNC:
+		return 0;
 	default:
 		return -EINVAL;
 	}
