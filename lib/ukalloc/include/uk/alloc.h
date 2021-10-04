@@ -125,6 +125,8 @@ static inline void *uk_malloc(struct uk_alloc *a, size_t size)
 		errno = ENOMEM;
 		return NULL;
 	}
+	if (size == 0)
+		size = 1;
 	return uk_do_malloc(a, size);
 }
 
