@@ -41,6 +41,7 @@
 #include <sys/unistd.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 #include <uk/process.h>
 #include <uk/print.h>
 #include <uk/plat/clone.h>
@@ -231,12 +232,35 @@ pid_t waitpid(pid_t pid __unused, int *wstatus __unused, int options __unused)
 	return -1;
 }
 
-pid_t wait3(int *wstatus __unused, int options __unused,
-		struct rusage *rusage __unused)
+pid_t wait3(int *wstatus, int options, struct rusage *rusage __unused)
 {
-	/* No children */
-	errno = ECHILD;
-	return -1;
+	struct ukplat_wait_result result;
+	pid_t ret = 0;
+	int posix_wstatus, uk_options, exit_value, rc;
+
+	uk_options = 0;
+	if (options & WNOHANG)
+		uk_options |= WAIT_OPT_NOHANG;
+
+	rc = ukplat_wait_any(&result, uk_options);
+	if (rc) {
+		errno = -rc;
+		ret = -1;
+		goto out;
+	}
+
+	posix_wstatus = 0;
+	if (WAIT_STATUS_EXITED_GET(result.wstatus)) {
+		exit_value = WAIT_STATUS_EXIT_VALUE_GET(result.wstatus);
+		posix_wstatus |= (exit_value << 8);
+
+		ret = result.child_id;
+	}
+
+	*wstatus = posix_wstatus;
+
+out:
+	return ret;
 }
 
 pid_t wait4(pid_t pid __unused, int *wstatus __unused, int options __unused,
