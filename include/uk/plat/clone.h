@@ -37,6 +37,38 @@
 
 int ukplat_clone(unsigned int nr_children, unsigned short *child_ids);
 
+/* Wait options */
+#define WAIT_OPT_NOHANG                0x1
+
+/* Wait status: Exit value */
+#define WAIT_STATUS_VALUE_POS          0
+#define WAIT_STATUS_VALUE_BITS         8
+#define WAIT_STATUS_VALUE_MASK \
+	(((1 << WAIT_STATUS_VALUE_BITS) - 1) << WAIT_STATUS_VALUE_POS)
+
+#define WAIT_STATUS_EXIT_VALUE_SET(wstatus, value) \
+	   (wstatus) |= (value) & WAIT_STATUS_VALUE_MASK
+#define WAIT_STATUS_EXIT_VALUE_GET(wstatus) \
+	   ((wstatus) & WAIT_STATUS_VALUE_MASK)
+
+/* Wait status: Exited */
+#define WAIT_STATUS_EXITED_POS         (WAIT_STATUS_VALUE_POS + WAIT_STATUS_VALUE_BITS)
+#define WAIT_STATUS_EXITED_BITS        1
+#define WAIT_STATUS_EXITED_VALUE_MASK \
+	(((1 << WAIT_STATUS_EXITED_BITS) - 1) << WAIT_STATUS_EXITED_POS)
+
+#define WAIT_STATUS_EXITED_SET(wstatus) \
+	   (wstatus) |= WAIT_STATUS_EXITED_VALUE_MASK
+#define WAIT_STATUS_EXITED_GET(wstatus) \
+	   ((wstatus) & WAIT_STATUS_EXITED_VALUE_MASK)
+
+struct ukplat_wait_result {
+	unsigned int child_id;
+	int wstatus;
+};
+
+int ukplat_wait_any(struct ukplat_wait_result *result, int options);
+
 int ukplat_get_domain_id(void);
 
 

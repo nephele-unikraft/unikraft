@@ -30,11 +30,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define __XEN_TOOLS__ 1
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <hashtable.h>
 #include <uk/init.h>
 #include <uk/plat/clone.h>
+#include <uk/list.h>
+#include <uk/mutex.h>
+#include <uk/print.h>
 #include <common/hypervisor.h>
 #include <common/gnttab.h>
 #include <common/events.h>
@@ -45,25 +50,202 @@
 #else
 #error "Unsupported architecture"
 #endif
+#include <xen/domctl.h>
+#include <xen/sched.h>
 #include <xen/clone.h>
 #include <xenbus/xs.h>
 
+struct child_domain {
+	domid_t domid;
+	struct uk_list_head child_list;
+};
+static UK_LIST_HEAD(child_domain_list);
+static struct uk_mutex child_domain_list_lock =
+		UK_MUTEX_INITIALIZER(child_domain_list_lock);
+
+static int child_domains_add(domid_t domid)
+{
+	struct child_domain *child;
+	int rc;
+
+	child = malloc(sizeof(struct child_domain));
+	if (!child) {
+		rc = -ENOMEM;
+		goto out;
+	}
+
+	child->domid = domid;
+
+	uk_mutex_lock(&child_domain_list_lock);
+	uk_list_add_tail(&child->child_list, &child_domain_list);
+	uk_mutex_unlock(&child_domain_list_lock);
+
+	rc = 0;
+out:
+	return rc;
+}
+
+static void child_domains_remove_last_n(unsigned int nr)
+{
+	struct child_domain *p, *n;
+	unsigned int count = 0;
+
+	uk_mutex_lock(&child_domain_list_lock);
+	uk_list_for_each_entry_safe_reverse(p, n, &child_domain_list, child_list) {
+		if (count == nr)
+			break;
+
+		uk_list_del(&p->child_list);
+		free(p);
+
+		count++;
+	}
+	uk_mutex_unlock(&child_domain_list_lock);
+}
 
 int ukplat_clone(unsigned int nr_children, unsigned short *child_ids)
 {
-    struct clone_op op;
-    unsigned long flags;
-    int rc;
+	struct clone_op op;
+	unsigned long flags;
+	int rc;
 
-    op.start_info_mfn = virt_to_mfn(HYPERVISOR_start_info);
-    op.nr_children = nr_children;
-    set_xen_guest_handle(op.child_list, child_ids);
+	op.start_info_mfn = virt_to_mfn(HYPERVISOR_start_info);
+	op.nr_children = nr_children;
+	set_xen_guest_handle(op.child_list, child_ids);
 
-    local_irq_save(flags);
-    rc = HYPERVISOR_clone(CLONEOP_clone, &op);
-    local_irq_restore(flags);
+	local_irq_save(flags);
+	rc = HYPERVISOR_clone(CLONEOP_clone, &op);
+	local_irq_restore(flags);
 
-    return rc;
+	if (rc == 0) {
+		for (unsigned int i = 0; i < nr_children; i++) {
+			rc = child_domains_add(child_ids[i]);
+			if (rc) {
+				uk_pr_err("Error calling child_domain_add()=%d\n", rc);
+				child_domains_remove_last_n(i);
+			}
+		}
+	}
+
+	return rc;
+}
+
+struct xen_dominfo {
+	uint32_t domid;
+	unsigned int dying:1, crashed:1, shutdown:1, paused:1,
+		blocked:1, running:1, hvm:1, hap:1;
+	unsigned int shutdown_reason; /* only meaningful if shutdown==1 */
+};
+
+static int get_domain_info(unsigned short domid, struct xen_dominfo *info)
+{
+	struct xen_domctl domctl;
+	int rc;
+
+	domctl.cmd = XEN_DOMCTL_getdomaininfo;
+	domctl.interface_version = XEN_DOMCTL_INTERFACE_VERSION;
+	domctl.domain = domid;
+	memset(&domctl.u, 0, sizeof(domctl.u));
+
+	rc = HYPERVISOR_domctl((unsigned long) &domctl);
+	if (rc) {
+		if (rc != -ESRCH)
+			uk_pr_err("Error calling HYPERVISOR_domctl()=%d\n", rc);
+		goto out;
+	}
+
+	info->domid = domctl.domain;
+
+	info->dying    = !!(domctl.u.getdomaininfo.flags & XEN_DOMINF_dying);
+	info->shutdown = !!(domctl.u.getdomaininfo.flags & XEN_DOMINF_shutdown);
+	info->paused   = !!(domctl.u.getdomaininfo.flags & XEN_DOMINF_paused);
+	info->blocked  = !!(domctl.u.getdomaininfo.flags & XEN_DOMINF_blocked);
+	info->running  = !!(domctl.u.getdomaininfo.flags & XEN_DOMINF_running);
+	info->hvm      = !!(domctl.u.getdomaininfo.flags & XEN_DOMINF_hvm_guest);
+	info->hap      = !!(domctl.u.getdomaininfo.flags & XEN_DOMINF_hap);
+
+	info->shutdown_reason =
+	    (domctl.u.getdomaininfo.flags >> XEN_DOMINF_shutdownshift) &
+	    XEN_DOMINF_shutdownmask;
+
+	if (info->shutdown && (info->shutdown_reason == SHUTDOWN_crash)) {
+		info->shutdown = 0;
+		info->crashed  = 1;
+	}
+
+out:
+	return rc;
+}
+
+static int ukplat_wait_any_once(struct ukplat_wait_result *result, bool *pfound)
+{
+	struct child_domain *p, *n;
+	struct xen_dominfo info;
+	bool found = false;
+	int scanned = 0, wstatus, rc;
+
+	uk_mutex_lock(&child_domain_list_lock);
+	uk_list_for_each_entry_safe(p, n, &child_domain_list, child_list) {
+		rc = get_domain_info(p->domid, &info);
+		if (rc && rc != -ESRCH) {
+			uk_pr_err("Error calling get_domain_info()=%d domid=%d\n",
+					rc, p->domid);
+			break;
+		}
+		scanned++;
+
+		wstatus = 0;
+		if (rc == -ESRCH || info.shutdown) {
+			WAIT_STATUS_EXIT_VALUE_SET(wstatus, 0);
+			WAIT_STATUS_EXITED_SET(wstatus);
+			rc = 0;
+
+		} else if (info.crashed) {
+
+		} else
+			continue;
+
+		result->child_id = p->domid;
+		result->wstatus = wstatus;
+
+		uk_list_del(&p->child_list);
+		free(p);
+
+		found = true;
+		break;
+	}
+	uk_mutex_unlock(&child_domain_list_lock);
+
+	if (scanned == 0) {
+		/* This domain has no No children */
+		UK_ASSERT(found == false);
+		rc = -ECHILD;
+	}
+
+	if (pfound)
+		*pfound = found;
+
+	return rc;
+}
+
+int ukplat_wait_any(struct ukplat_wait_result *result, int options)
+{
+	int rc;
+
+	if (options & WAIT_OPT_NOHANG) {
+		rc = ukplat_wait_any_once(result, NULL);
+
+	} else {
+		bool found = false;
+
+		while (!found) {
+			rc = ukplat_wait_any_once(result, &found);
+			if (rc)
+				break;
+		}
+	}
+
+	return rc;
 }
 
 int ukplat_get_domain_id(void)
