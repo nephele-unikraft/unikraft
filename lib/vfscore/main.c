@@ -1463,7 +1463,6 @@ int dup3(int oldfd, int newfd, int flags)
 		goto out_errno;
 	}
 
-	fdrop(fp);
 	trace_vfs_dup3_ret(newfd);
 	return newfd;
 
