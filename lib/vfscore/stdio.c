@@ -190,36 +190,57 @@ static struct vnops stdio_vnops = {
 	stdio_symlink,		/* symbolic link */
 };
 
-static struct vnode stdio_vnode = {
-	.v_ino = 1,
-	.v_op = &stdio_vnops,
-	.v_lock = UK_MUTEX_INITIALIZER(stdio_vnode.v_lock),
-	.v_refcnt = 1,
-	.v_type = VCHR,
+#define stdio_vget  ((vfsop_vget_t) vfscore_vop_nullop)
+
+static struct vfsops stdio_vfsops = {
+	.vfs_vget = stdio_vget,
+	.vfs_vnops = &stdio_vnops
 };
 
-static struct dentry stdio_dentry = {
-	.d_vnode = &stdio_vnode,
+static struct mount stdio_mount = {
+	.m_op = &stdio_vfsops
 };
 
-static struct vfscore_file  stdio_file = {
-	.fd = 1,
-	.f_flags = UK_FWRITE | UK_FREAD,
-	.f_dentry = &stdio_dentry,
-	.f_vfs_flags = UK_VFSCORE_NOPOS,
-	/* reference count is 2 because close(0) is a valid
-	 * operation. However it is not properly handled in the
-	 * current implementation. */
-	.f_count = 2,
-};
+static void init_stdin(void)
+{
+	int ret = 0;
+	int vfs_fd;
+	struct vfscore_file *vfs_file = NULL;
+	struct dentry *dp;
+	struct vnode *vp;
+
+	vfs_fd = vfscore_alloc_fd();
+	UK_ASSERT(vfs_fd == 0);
+
+	ret = vfscore_vget(&stdio_mount, 1, &vp);
+	UK_ASSERT(ret == 0); /* we should not find it in cache */
+	UK_ASSERT(vp);
+	vp->v_type = VCHR;
+	uk_mutex_unlock(&vp->v_lock);
+
+	dp = dentry_alloc(NULL, vp, "/");
+	UK_ASSERT(dp);
+
+	vfs_file = calloc(1, sizeof(*vfs_file));
+	UK_ASSERT(vfs_file);
+	vfs_file->fd = vfs_fd;
+	vfs_file->f_flags = UK_FWRITE | UK_FREAD;
+	vfs_file->f_count = 1;
+	vfs_file->f_data = NULL;
+	vfs_file->f_dentry = dp;
+	vfs_file->f_vfs_flags = UK_VFSCORE_NOPOS;
+
+	ret = vfscore_install_fd(vfs_fd, vfs_file);
+	UK_ASSERT(ret == 0);
+
+	/* Only the dentry should hold a reference; release ours */
+	vrele(vp);
+}
 
 void init_stdio(void)
 {
-	int fd;
+	init_stdin();
 
-	fd = vfscore_alloc_fd();
-	UK_ASSERT(fd == 0);
-	vfscore_install_fd(0, &stdio_file);
 	if (dup2(0, 1) != 1)
 		uk_pr_err("failed to dup to stdin\n");
 	if (dup2(0, 2) != 2)
