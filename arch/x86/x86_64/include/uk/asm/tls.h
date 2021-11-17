@@ -52,7 +52,7 @@ static inline __sz ukarch_tls_area_size(void)
 
 static inline __sz ukarch_tls_area_align(void)
 {
-	return 8;
+	return 32;
 }
 
 static inline void ukarch_tls_area_copy(void *tls_area)
