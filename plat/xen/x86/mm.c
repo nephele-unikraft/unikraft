@@ -658,6 +658,99 @@ void _init_mem_set_readonly(void *text, void *etext)
 #endif
 }
 
+int ukplat_set_prot(void *addr, unsigned long size, unsigned long prot)
+{
+    unsigned long start_address = ((unsigned long) addr + PAGE_SIZE - 1) & PAGE_MASK;
+    unsigned long end_address = (unsigned long) addr + size;
+    unsigned long mfn, offset, myprot;
+    pgentry_t *tab, pte;
+#ifdef CONFIG_PARAVIRT
+    static mmu_update_t mmu_updates[L1_PAGETABLE_ENTRIES + 1];
+    int count = 0;
+    int rc = 0;
+#endif
+
+    mfn = pfn_to_mfn(virt_to_pfn(pt_base));
+
+    while ( start_address + PAGE_SIZE <= end_address )
+    {
+        tab = pt_base;
+        mfn = pfn_to_mfn(virt_to_pfn(pt_base));
+
+#if defined(__x86_64__)
+        offset = l4_table_offset(start_address);
+        pte = tab[offset];
+        mfn = pte_to_mfn(pte);
+        tab = to_virt(mfn_to_pfn(mfn) << PAGE_SHIFT);
+#endif
+        offset = l3_table_offset(start_address);
+        pte = tab[offset];
+        mfn = pte_to_mfn(pte);
+        tab = to_virt(mfn_to_pfn(mfn) << PAGE_SHIFT);
+        offset = l2_table_offset(start_address);
+        if ( !(tab[offset] & _PAGE_PSE) )
+        {
+            pte = tab[offset];
+            mfn = pte_to_mfn(pte);
+            tab = to_virt(mfn_to_pfn(mfn) << PAGE_SHIFT);
+
+            offset = l1_table_offset(start_address);
+        }
+
+#ifdef CONFIG_PARAVIRT
+        if (tab[offset] >> 52 == 0xc && (prot & PAGE_PROT_WRITE)) {
+            /* Workaround for writing on COWed pages */
+            *((unsigned long *) start_address) = 0;
+
+        } else {
+            mmu_updates[count].ptr =
+                    ((pgentry_t)mfn << PAGE_SHIFT) + sizeof(pgentry_t) * offset;
+
+            myprot = L1_PROT;
+            if (!(prot & PAGE_PROT_WRITE))
+                myprot &= ~_PAGE_RW;
+
+            mmu_updates[count].val =
+                    (pgentry_t) pte_to_mfn(tab[offset]) << PAGE_SHIFT | myprot;
+            if (!(mmu_updates[count].val & _PAGE_PRESENT))
+                UK_CRASH("not present prot=%lx\n", prot);
+            count++;
+        }
+#else
+        tab[offset] &= ~_PAGE_RW;
+#endif
+
+        start_address += PAGE_SIZE;
+
+#ifdef CONFIG_PARAVIRT
+        if ( count == L1_PAGETABLE_ENTRIES || start_address + PAGE_SIZE > end_address )
+        {
+            rc = HYPERVISOR_mmu_update(mmu_updates, count, NULL, DOMID_SELF);
+            if ( rc < 0 )
+                UK_CRASH("%s: PTE could not be updated, rc=%d\n", __FUNCTION__, rc);
+            count = 0;
+        }
+#else
+        if ( start_address == (1UL << L2_PAGETABLE_SHIFT) )
+            page_size = 1UL << L2_PAGETABLE_SHIFT;
+#endif
+    }
+
+#ifdef CONFIG_PARAVIRT
+    {
+        mmuext_op_t op = {
+            .cmd = MMUEXT_TLB_FLUSH_ALL,
+        };
+        int count;
+        HYPERVISOR_mmuext_op(&op, 1, &count, DOMID_SELF);
+    }
+#else
+    write_cr3((unsigned long)pt_base);
+#endif
+
+    return rc;
+}
+
 /*
  * Clear some of the bootstrap memory
  */

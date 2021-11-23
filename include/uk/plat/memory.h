@@ -164,6 +164,13 @@ struct uk_alloc *ukplat_memallocator_get(void);
  */
 void ukplat_stack_set_current_thread(void *thread_addr);
 
+#define PAGE_PROT_NONE    0x0
+#define PAGE_PROT_READ    0x1
+#define PAGE_PROT_WRITE   0x2
+#define PAGE_PROT_EXEC    0x4
+
+int ukplat_set_prot(void *addr, unsigned long size, unsigned long prot);
+
 #ifdef __cplusplus
 }
 #endif
