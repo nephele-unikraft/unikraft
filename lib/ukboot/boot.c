@@ -52,6 +52,9 @@
 #elif CONFIG_LIBUKBOOT_INITTINYALLOC
 #include <uk/tinyalloc.h>
 #endif
+#if CONFIG_LIBPOSIX_MMAP
+#include <page_allocator.h>
+#endif
 #if CONFIG_LIBUKSCHED
 #include <uk/sched.h>
 #endif
@@ -241,6 +244,12 @@ void ukplat_entry(int argc, char *argv[])
 		 * subsequent region to it
 		 */
 		if (!a) {
+#if CONFIG_LIBPOSIX_MMAP
+			__sz memsz;
+
+			memsz = page_allocator_init(md.base, md.len);
+			md.len -= memsz;
+#endif
 #if CONFIG_LIBUKBOOT_INITBBUDDY
 			a = uk_allocbbuddy_init(md.base, md.len);
 #elif CONFIG_LIBUKBOOT_INITREGION
