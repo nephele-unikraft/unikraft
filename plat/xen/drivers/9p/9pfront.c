@@ -251,7 +251,7 @@ static int p9front_allocate_dev_ring(struct p9front_dev *p9fdev, int idx)
 	/* Grant refs to the entire data. */
 	for (i = 0; i < (1 << p9fdev->ring_order); i++) {
 		ring->intf->ref[i] = gnttab_grant_access(xendev->otherend_id,
-				virt_to_mfn(data_bytes) + i, 0);
+				virt_to_mfn(data_bytes + i * PAGE_SIZE), 0);
 		UK_ASSERT(ring->intf->ref[i] != GRANT_INVALID_REF);
 	}
 
