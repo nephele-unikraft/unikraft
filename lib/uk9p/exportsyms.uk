@@ -34,6 +34,7 @@ uk_9p_walk
 uk_9p_open
 uk_9p_create
 uk_9p_remove
+uk_9p_rename
 uk_9p_clunk
 uk_9p_read
 uk_9p_write

@@ -567,6 +567,19 @@ out:
 	return -rc;
 }
 
+static int uk_9pfs_rename(struct vnode *dvp1, struct vnode *vp1, char *name1 __unused,
+		struct vnode *dvp2, struct vnode *vp2 __unused, char *name2)
+{
+	struct uk_9pdev *dev = UK_9PFS_MD(dvp1->v_mount)->dev;
+	struct uk_9pfid *fid = UK_9PFS_VFID(vp1);
+	struct uk_9pfid *newdirfid = UK_9PFS_VFID(dvp2);
+	int rc;
+
+	rc = uk_9p_rename(dev, fid, newdirfid, name2);
+
+	return rc;
+}
+
 #define uk_9pfs_seek		((vnop_seek_t)vfscore_vop_nullop)
 #define uk_9pfs_ioctl		((vnop_ioctl_t)vfscore_vop_einval)
 #define uk_9pfs_fsync		((vnop_fsync_t)vfscore_vop_nullop)
@@ -577,7 +590,6 @@ out:
 #define uk_9pfs_readlink	((vnop_readlink_t)vfscore_vop_einval)
 #define uk_9pfs_symlink		((vnop_symlink_t)vfscore_vop_eperm)
 #define uk_9pfs_fallocate	((vnop_fallocate_t)vfscore_vop_nullop)
-#define uk_9pfs_rename		((vnop_rename_t)vfscore_vop_einval)
 
 struct vnops uk_9pfs_vnops = {
 	.vop_open	= uk_9pfs_open,

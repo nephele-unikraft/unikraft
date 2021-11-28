@@ -169,6 +169,9 @@ int uk_9p_create(struct uk_9pdev *dev, struct uk_9pfid *fid,
  */
 int uk_9p_remove(struct uk_9pdev *dev, struct uk_9pfid *fid);
 
+
+int uk_9p_rename(struct uk_9pdev *dev, struct uk_9pfid *fid, struct uk_9pfid *newdirfid, const char *name);
+
 /**
  * Clunks the fid, telling the server to forget its previous association.
  *

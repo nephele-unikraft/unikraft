@@ -55,6 +55,8 @@ extern "C" {
  * Source: https://github.com/9fans/plan9port/blob/master/include/fcall.h
  */
 enum uk_9p_type {
+	UK_9P_TRENAME           = 20,
+	UK_9P_RRENAME,
 	UK_9P_TVERSION          = 100,
 	UK_9P_RVERSION,
 	UK_9P_TAUTH             = 102,

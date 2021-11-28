@@ -353,6 +353,33 @@ out:
 	return rc;
 }
 
+int uk_9p_rename(struct uk_9pdev *dev, struct uk_9pfid *fid,
+		struct uk_9pfid *newdirfid, const char *name)
+{
+	struct uk_9preq *req;
+	struct uk_9p_str name_str;
+	int rc = 0;
+
+	uk_9p_str_init(&name_str, name);
+
+	req = request_create(dev, UK_9P_TRENAME);
+	if (PTRISERR(req))
+		return PTR2ERR(req);
+
+	uk_pr_debug("TRENAME fid %u\n", fid->fid);
+
+	if ((rc = uk_9preq_write32(req, fid->fid)) ||
+		(rc = uk_9preq_write32(req, newdirfid->fid)) ||
+		(rc = uk_9preq_writestr(req, &name_str)) ||
+		(rc = send_and_wait_no_zc(dev, req)))
+		goto out;
+	uk_pr_debug("RRENAME\n");
+
+out:
+	uk_9pdev_req_remove(dev, req);
+	return rc;
+}
+
 int uk_9p_clunk(struct uk_9pdev *dev, struct uk_9pfid *fid)
 {
 	struct uk_9preq *req;
