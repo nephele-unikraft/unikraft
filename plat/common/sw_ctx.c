@@ -109,3 +109,12 @@ void sw_ctx_callbacks_init(struct ukplat_ctx_callbacks *ctx_cbs)
 	ctx_cbs->start_cb = sw_ctx_start;
 	ctx_cbs->switch_cb = sw_ctx_switch;
 }
+
+int sw_ctx_get_sp(void *ctx, unsigned long *sp)
+{
+	if (!ctx || !sp)
+		return -EINVAL;
+
+	*sp = ((struct sw_ctx *) ctx)->sp;
+	return 0;
+}

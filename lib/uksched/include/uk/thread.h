@@ -48,6 +48,10 @@
 extern "C" {
 #endif
 
+#ifdef CONFIG_LIBPROFILING
+#define ENABLE_THREAD_WATCHDOG 0
+#endif
+
 struct uk_sched;
 
 struct uk_thread {
@@ -64,6 +68,12 @@ struct uk_thread {
 	void *prv;
 #if CONFIG_LIBPOSIX_SIGNAL
 	struct uk_thread_signal_state tss;
+#endif
+#if ENABLE_THREAD_WATCHDOG
+	struct {
+		struct timespec last_check_ts;
+		unsigned long total_msec;
+	} running_time;
 #endif
 #ifdef CONFIG_LIBNEWLIBC
 	struct _reent reent;
@@ -127,6 +137,12 @@ void uk_thread_fini(struct uk_thread *thread,
 void uk_thread_block_timeout(struct uk_thread *thread, __nsec nsec);
 void uk_thread_block(struct uk_thread *thread);
 void uk_thread_wake(struct uk_thread *thread);
+
+#if ENABLE_THREAD_WATCHDOG
+int uk_thread_stack_dump(struct uk_thread *thread, struct __regs *regs);
+void uk_thread_watchdog_init(struct uk_thread *thread);
+void uk_thread_watchdog(struct __regs *regs);
+#endif
 
 #ifdef __cplusplus
 }

@@ -40,6 +40,9 @@
 #include <uk/print.h>
 #include <uk/assert.h>
 #include <uk/arch/tls.h>
+#ifdef CONFIG_LIBPROFILING
+#include <profile.h>
+#endif
 
 /* Pushes the specified value onto the stack of the specified thread */
 static void stack_push(unsigned long *sp, unsigned long value)
@@ -260,3 +263,70 @@ int uk_thread_signal(struct uk_thread *thread, int sig)
 #endif
 	return rc;
 }
+
+#if ENABLE_THREAD_WATCHDOG
+extern int sw_ctx_get_sp(void *ctx, unsigned long *sp);
+int uk_thread_stack_dump(struct uk_thread *thread, struct __regs *regs)
+{
+	unsigned long sp, bp;
+	int rc = 0;
+
+	if (regs) {
+		sp = regs->rsp;
+		bp = regs->rbp;
+
+	} else {
+		rc = sw_ctx_get_sp(thread->ctx, &sp);
+		if (rc)
+			goto out;
+
+		/* jump over r15, r14, r13, r12, rbx */
+		bp = sp + 5 * sizeof(unsigned long);
+	}
+
+	uk_pr_err("-------------------------------------------\n");
+	uk_pr_err("name=%s stack=%p rbp=0x%lx rsp=0x%lx IRQ=%c\n",
+			thread->name, thread->stack, bp, sp, regs ? 'y' : 'n');
+	stack_walk_for_frame(bp);
+	uk_pr_err("-------------------------------------------\n");
+out:
+	return rc;
+}
+
+void uk_thread_watchdog_init(struct uk_thread *thread)
+{
+	clock_gettime(CLOCK_REALTIME, &thread->running_time.last_check_ts);
+	thread->running_time.total_msec = 0;
+}
+
+int start_watchdog;
+struct uk_thread *global_current;
+
+void uk_thread_watchdog(struct __regs *regs)
+{
+#if LIB_PROFILING
+	struct timespec now;
+	struct uk_thread *crnt_thread;
+	unsigned long delta;
+
+	if (!start_watchdog)
+		return;
+
+	UK_ASSERT(clock_gettime(CLOCK_REALTIME, &now) == 0);
+
+	crnt_thread = global_current;
+
+	delta = (unsigned long) timespec_diff_msec(&crnt_thread->running_time.last_check_ts, &now);
+	crnt_thread->running_time.total_msec += delta;
+
+	if (crnt_thread->running_time.total_msec > 100) {
+		uk_pr_err("thread=%s total_time=%lu\n",
+			crnt_thread->name, crnt_thread->running_time.total_msec);
+		uk_thread_stack_dump(crnt_thread, regs);
+	}
+
+	crnt_thread->running_time.last_check_ts = now;
+#endif
+}
+#endif
+

@@ -31,6 +31,11 @@ uk_thread_attr_get_prio
 uk_thread_attr_set_timeslice
 uk_thread_attr_get_timeslice
 uk_thread_signal
+uk_thread_stack_dump
+uk_thread_watchdog_init
+uk_thread_watchdog
+global_current
+start_watchdog
 
 # Newlib related
 __getreent
