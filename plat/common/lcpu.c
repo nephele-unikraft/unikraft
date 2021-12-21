@@ -45,7 +45,10 @@ void ukplat_lcpu_halt(void)
 
 void ukplat_lcpu_halt_irq(void)
 {
+	/* On Xen halt disables the events atomically (TODO check KVM) */
+#if !CONFIG_PLAT_XEN
 	ukplat_lcpu_enable_irq();
+#endif
 	halt();
 	ukplat_lcpu_disable_irq();
 }
