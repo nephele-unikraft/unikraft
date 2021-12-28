@@ -52,6 +52,30 @@
 #include <uk/wait.h>
 #endif
 
+/* If scheduling is enabled, the 9p interrupt handler notifies the bottom-half
+ * thread to process the newly received event. If scheduling is not enabled
+ * then the interrupt handler also processes the event and shares resources
+ * with "process" context. */
+#if CONFIG_LIBUKSCHED
+
+#define P9_SPIN_LOCK(lock) \
+	ukarch_spin_lock(lock)
+
+#define P9_SPIN_UNLOCK(lock) \
+	ukarch_spin_unlock(lock)
+
+#else
+#define P9_SPIN_LOCK(lock) \
+{ \
+	unsigned long flags; \
+	\
+	ukplat_spin_lock_irqsave(lock, flags)
+
+#define P9_SPIN_UNLOCK(lock) \
+	ukplat_spin_unlock_irqrestore(lock, flags) \
+}
+#endif
+
 static void _fid_mgmt_init(struct uk_9pdev_fid_mgmt *fid_mgmt)
 {
 	ukarch_spin_lock_init(&fid_mgmt->spinlock);
@@ -110,10 +134,9 @@ static void _fid_mgmt_del_fid_locked(struct uk_9pdev_fid_mgmt *fid_mgmt,
 
 static void _fid_mgmt_cleanup(struct uk_9pdev_fid_mgmt *fid_mgmt)
 {
-	unsigned long flags;
 	struct uk_9pfid *fid, *fidn;
 
-	ukplat_spin_lock_irqsave(&fid_mgmt->spinlock, flags);
+	P9_SPIN_LOCK(&fid_mgmt->spinlock);
 	/*
 	 * Every fid should have been clunked *before* destroying the
 	 * connection.
@@ -124,7 +147,7 @@ static void _fid_mgmt_cleanup(struct uk_9pdev_fid_mgmt *fid_mgmt)
 		uk_list_del(&fid->_list);
 		uk_free(fid->_dev->a, fid);
 	}
-	ukplat_spin_unlock_irqrestore(&fid_mgmt->spinlock, flags);
+	P9_SPIN_UNLOCK(&fid_mgmt->spinlock);
 }
 
 static void _req_mgmt_init(struct uk_9pdev_req_mgmt *req_mgmt)
@@ -177,11 +200,10 @@ static uint16_t _req_mgmt_next_tag_locked(struct uk_9pdev_req_mgmt *req_mgmt)
 
 static void _req_mgmt_cleanup(struct uk_9pdev_req_mgmt *req_mgmt __unused)
 {
-	unsigned long flags;
 	uint16_t tag;
 	struct uk_9preq *req, *reqn;
 
-	ukplat_spin_lock_irqsave(&req_mgmt->spinlock, flags);
+	P9_SPIN_LOCK(&req_mgmt->spinlock);
 	uk_list_for_each_entry_safe(req, reqn, &req_mgmt->req_list, _list) {
 		tag = req->tag;
 		_req_mgmt_del_req_locked(req_mgmt, req);
@@ -204,7 +226,7 @@ static void _req_mgmt_cleanup(struct uk_9pdev_req_mgmt *req_mgmt __unused)
 		uk_list_del(&req->_list);
 		uk_free(req->_a, req);
 	}
-	ukplat_spin_unlock_irqrestore(&req_mgmt->spinlock, flags);
+	P9_SPIN_UNLOCK(&req_mgmt->spinlock);
 }
 
 struct uk_9pdev *uk_9pdev_connect(const struct uk_9pdev_trans *trans,
@@ -329,14 +351,13 @@ struct uk_9preq *uk_9pdev_req_create(struct uk_9pdev *dev, uint8_t type)
 	struct uk_9preq *req;
 	int rc = 0;
 	uint16_t tag;
-	unsigned long flags;
 
 	UK_ASSERT(dev);
 
-	ukplat_spin_lock_irqsave(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_LOCK(&dev->_req_mgmt.spinlock);
 	if (!(req = _req_mgmt_from_freelist_locked(&dev->_req_mgmt))) {
 		/* Don't allocate with the spinlock held. */
-		ukplat_spin_unlock_irqrestore(&dev->_req_mgmt.spinlock, flags);
+		P9_SPIN_UNLOCK(&dev->_req_mgmt.spinlock);
 		req = uk_calloc(dev->a, 1, sizeof(*req));
 		if (req == NULL) {
 			rc = -ENOMEM;
@@ -349,7 +370,7 @@ struct uk_9preq *uk_9pdev_req_create(struct uk_9pdev *dev, uint8_t type)
 		 * _req_mgmt_cleanup.
 		 */
 		req->_a = dev->a;
-		ukplat_spin_lock_irqsave(&dev->_req_mgmt.spinlock, flags);
+		P9_SPIN_LOCK(&dev->_req_mgmt.spinlock);
 	}
 
 	uk_9preq_init(req);
@@ -373,7 +394,7 @@ struct uk_9preq *uk_9pdev_req_create(struct uk_9pdev *dev, uint8_t type)
 	req->xmit.type = type;
 
 	_req_mgmt_add_req_locked(&dev->_req_mgmt, req);
-	ukplat_spin_unlock_irqrestore(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_UNLOCK(&dev->_req_mgmt.spinlock);
 
 	req->state = UK_9PREQ_INITIALIZED;
 
@@ -385,11 +406,10 @@ out:
 
 struct uk_9preq *uk_9pdev_req_lookup(struct uk_9pdev *dev, uint16_t tag)
 {
-	unsigned long flags;
 	struct uk_9preq *req;
 	int rc = -EINVAL;
 
-	ukplat_spin_lock_irqsave(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_LOCK(&dev->_req_mgmt.spinlock);
 	uk_list_for_each_entry(req, &dev->_req_mgmt.req_list, _list) {
 		if (tag != req->tag)
 			continue;
@@ -397,7 +417,7 @@ struct uk_9preq *uk_9pdev_req_lookup(struct uk_9pdev *dev, uint16_t tag)
 		uk_9preq_get(req);
 		break;
 	}
-	ukplat_spin_unlock_irqrestore(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_UNLOCK(&dev->_req_mgmt.spinlock);
 
 	if (rc == 0)
 		return req;
@@ -407,34 +427,29 @@ struct uk_9preq *uk_9pdev_req_lookup(struct uk_9pdev *dev, uint16_t tag)
 
 int uk_9pdev_req_remove(struct uk_9pdev *dev, struct uk_9preq *req)
 {
-	unsigned long flags;
-
-	ukplat_spin_lock_irqsave(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_LOCK(&dev->_req_mgmt.spinlock);
 	_req_mgmt_del_req_locked(&dev->_req_mgmt, req);
-	ukplat_spin_unlock_irqrestore(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_UNLOCK(&dev->_req_mgmt.spinlock);
 
 	return uk_9preq_put(req);
 }
 
 void uk_9pdev_req_to_freelist(struct uk_9pdev *dev, struct uk_9preq *req)
 {
-	unsigned long flags;
-
 	if (!dev)
 		return;
 
-	ukplat_spin_lock_irqsave(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_LOCK(&dev->_req_mgmt.spinlock);
 	_req_mgmt_req_to_freelist_locked(&dev->_req_mgmt, req);
-	ukplat_spin_unlock_irqrestore(&dev->_req_mgmt.spinlock, flags);
+	P9_SPIN_UNLOCK(&dev->_req_mgmt.spinlock);
 }
 
 struct uk_9pfid *uk_9pdev_fid_create(struct uk_9pdev *dev)
 {
 	struct uk_9pfid *fid = NULL;
 	int rc = 0;
-	unsigned long flags;
 
-	ukplat_spin_lock_irqsave(&dev->_fid_mgmt.spinlock, flags);
+	P9_SPIN_LOCK(&dev->_fid_mgmt.spinlock);
 	rc = _fid_mgmt_next_fid_locked(&dev->_fid_mgmt, dev, &fid);
 	if (rc < 0)
 		goto out;
@@ -442,7 +457,7 @@ struct uk_9pfid *uk_9pdev_fid_create(struct uk_9pdev *dev)
 	_fid_mgmt_add_fid_locked(&dev->_fid_mgmt, fid);
 
 out:
-	ukplat_spin_unlock_irqrestore(&dev->_fid_mgmt.spinlock, flags);
+	P9_SPIN_UNLOCK(&dev->_fid_mgmt.spinlock);
 	if (rc == 0)
 		return fid;
 	return ERR2PTR(rc);
@@ -451,7 +466,6 @@ out:
 void uk_9pdev_fid_release(struct uk_9pfid *fid)
 {
 	struct uk_9pdev *dev = fid->_dev;
-	unsigned long flags;
 	bool move_to_freelist = false;
 	int rc;
 
@@ -467,9 +481,9 @@ void uk_9pdev_fid_release(struct uk_9pfid *fid)
 
 out:
 	/* Then remove it from any internal data structures. */
-	ukplat_spin_lock_irqsave(&dev->_fid_mgmt.spinlock, flags);
+	P9_SPIN_LOCK(&dev->_fid_mgmt.spinlock);
 	_fid_mgmt_del_fid_locked(&dev->_fid_mgmt, fid, move_to_freelist);
-	ukplat_spin_unlock_irqrestore(&dev->_fid_mgmt.spinlock, flags);
+	P9_SPIN_UNLOCK(&dev->_fid_mgmt.spinlock);
 }
 
 bool uk_9pdev_set_msize(struct uk_9pdev *dev, uint32_t msize)
