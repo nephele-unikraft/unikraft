@@ -309,7 +309,7 @@ int uk_9p_create(struct uk_9pdev *dev, struct uk_9pfid *fid,
 	if (PTRISERR(req))
 		return PTR2ERR(req);
 
-	uk_pr_debug("TOPEN fid %u mode %u\n", fid->fid, mode);
+	uk_pr_debug("TCREATE fid %u mode %u name %s\n", fid->fid, mode, name);
 
 	if ((rc = uk_9preq_write32(req, fid->fid)) ||
 		(rc = uk_9preq_writestr(req, &name_str)) ||
@@ -424,7 +424,7 @@ int64_t uk_9p_read(struct uk_9pdev *dev, struct uk_9pfid *fid,
 		(rc = uk_9preq_write64(req, offset)) ||
 		(rc = uk_9preq_write32(req, count)) ||
 		(rc = send_and_wait_zc(dev, req, UK_9PREQ_ZCDIR_READ, buf,
-				       count, 11)) ||
+				       count, UK_9P_HEADER_SIZE + sizeof(count))) ||
 		(rc = uk_9preq_read32(req, &count)))
 		goto out;
 
@@ -456,7 +456,7 @@ int64_t uk_9p_write(struct uk_9pdev *dev, struct uk_9pfid *fid,
 		(rc = uk_9preq_write64(req, offset)) ||
 		(rc = uk_9preq_write32(req, count)) ||
 		(rc = send_and_wait_zc(dev, req, UK_9PREQ_ZCDIR_WRITE,
-				(void *)buf, count, 23)) ||
+				(void *)buf, count, 0)) || /* zc_offset not used for write ops */
 		(rc = uk_9preq_read32(req, &count)))
 		goto out;
 
