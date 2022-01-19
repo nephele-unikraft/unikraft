@@ -58,6 +58,10 @@ struct uk_9pfid {
 	struct uk_9p_qid        qid;
 	/* I/O unit. */
 	uint32_t                iounit;
+#if CONFIG_LIBUK9P_FID_CACHE
+	bool was_created;
+	bool was_cloned;
+#endif
 	/*
 	 * If removed, no clunk is necessary, as the remove operation
 	 * implicitly clunks the fid.

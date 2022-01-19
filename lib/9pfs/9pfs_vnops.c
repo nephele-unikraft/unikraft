@@ -38,6 +38,9 @@
 #include <dirent.h>
 #include <uk/config.h>
 #include <uk/9p.h>
+#if CONFIG_LIBUK9P_FID_CACHE
+#include <uk/9pcache.h>
+#endif
 #include <uk/errptr.h>
 #include <vfscore/mount.h>
 #include <vfscore/dentry.h>
@@ -171,6 +174,12 @@ static int uk_9pfs_open(struct vfscore_file *file)
 		return ENOMEM;
 
 	/* Clone fid. */
+#if CONFIG_LIBUK9P_FID_CACHE
+	openedfid = UK_9PFS_VFID(file->f_dentry->d_vnode);
+	if (p9_fid_cache_contains(openedfid))
+		uk_9pfid_get(openedfid);
+	else
+#endif
 	openedfid = uk_9p_walk(dev, UK_9PFS_VFID(file->f_dentry->d_vnode),
 			NULL);
 	if (PTRISERR(openedfid)) {
@@ -178,12 +187,17 @@ static int uk_9pfs_open(struct vfscore_file *file)
 		goto out;
 	}
 
+#if CONFIG_LIBUK9P_FID_CACHE
+	if (!openedfid->was_created)
+#endif
+	{
 	/* Open cloned fid. */
 	rc = uk_9p_open(dev, openedfid,
 		uk_9pfs_open_mode_from_posix_flags(file->f_flags));
 
 	if (rc)
 		goto out_err;
+	}
 
 	fd->fid = openedfid;
 	file->f_data = fd;
@@ -225,24 +239,36 @@ static int uk_9pfs_lookup(struct vnode *dvp, char *name, struct vnode **vpp)
 	if (strlen(name) > NAME_MAX)
 		return ENAMETOOLONG;
 
-	fid = uk_9p_walk(dev, dfid, name);
-	if (PTRISERR(fid)) {
-		rc = PTR2ERR(fid);
-		goto out;
+#if CONFIG_LIBUK9P_FID_CACHE
+	fid = p9_fid_cache_get(dvp, name, &stat);
+	if (!fid)
+#endif
+	{
+		fid = uk_9p_walk(dev, dfid, name);
+		if (PTRISERR(fid)) {
+			rc = PTR2ERR(fid);
+			goto out;
+		}
+
+		stat_req = uk_9p_stat(dev, fid, &stat);
+		if (PTRISERR(stat_req)) {
+			rc = PTR2ERR(stat_req);
+			goto out_fid;
+		}
+
+		/* No stat string fields are used below. */
+		uk_9pdev_req_remove(dev, stat_req);
+
+#if CONFIG_LIBUK9P_FID_CACHE
+		rc = p9_fid_cache_add(dvp, name, fid, &stat);
+		if (rc)
+			goto out_fid;
+#endif
 	}
 
-	stat_req = uk_9p_stat(dev, fid, &stat);
-	if (PTRISERR(stat_req)) {
-		rc = PTR2ERR(stat_req);
-		goto out_fid;
-	}
-
-	/* No stat string fields are used below. */
-	uk_9pdev_req_remove(dev, stat_req);
-
-	if (vfscore_vget(dvp->v_mount, uk_9pfs_ino(&stat), &vp)) {
+	rc = vfscore_vget(dvp->v_mount, uk_9pfs_ino(&stat), &vp);
+	if (rc) {
 		/* Already in cache. */
-		rc = 0;
 		*vpp = vp;
 		/* if the vnode already has node data, it may be reused. */
 		if (vp->v_data)
@@ -296,7 +322,28 @@ static int uk_9pfs_create_generic(struct vnode *dvp, char *name, mode_t mode)
 	rc = uk_9p_create(dev, fid, name, uk_9pfs_perm_from_posix_mode(mode),
 			UK_9P_OTRUNC | UK_9P_OWRITE, NULL);
 
+#if CONFIG_LIBUK9P_FID_CACHE
+	if (rc == 0) {
+		struct uk_9p_stat stat;
+		struct uk_9preq *stat_req;
+
+		stat_req = uk_9p_stat(dev, fid, &stat);
+		if (PTRISERR(stat_req)) {
+			rc = PTR2ERR(stat_req);
+			goto out;
+		}
+		uk_9pdev_req_remove(dev, stat_req);
+
+		rc = p9_fid_cache_add(dvp, name, fid, &stat);
+		if (rc)
+			goto out;
+
+		fid->was_created = true;
+	}
+out:
+#else
 	uk_9pfid_put(fid);
+#endif
 	return -rc;
 }
 
@@ -470,7 +517,7 @@ static int uk_9pfs_read(struct vnode *vp, struct vfscore_file *fp,
 static int uk_9pfs_write(struct vnode *vp, struct uio *uio, int ioflag)
 {
 	struct uk_9pdev *dev = UK_9PFS_MD(vp->v_mount)->dev;
-	struct uk_9pfid *fid;
+	struct uk_9pfid *fid, *fid_clone;
 	struct iovec *iov;
 	int rc;
 
@@ -488,17 +535,32 @@ static int uk_9pfs_write(struct vnode *vp, struct uio *uio, int ioflag)
 	if (ioflag & IO_APPEND)
 		uio->uio_offset = vp->v_size;
 
-	/* Clone vnode fid. */
-	fid = uk_9p_walk(dev, UK_9PFS_VFID(vp), NULL);
-	if (PTRISERR(fid))
-		return -PTR2ERR(fid);
+	fid = UK_9PFS_VFID(vp);
+#if CONFIG_LIBUK9P_FID_CACHE
+	fid_clone = p9_wrfid_cache_get(fid);
+	if (!fid_clone)
+#endif
+	{
+		/* Clone vnode fid. */
+		fid_clone = uk_9p_walk(dev, fid, NULL);
+		if (PTRISERR(fid_clone)) {
+			rc = PTR2ERR(fid_clone);
+			goto out;
+		}
 
-	rc = uk_9p_open(dev, fid, UK_9P_OWRITE);
-	if (rc < 0)
+		rc = uk_9p_open(dev, fid_clone, UK_9P_OWRITE);
+		if (rc < 0)
+			goto out;
+
+#if CONFIG_LIBUK9P_FID_CACHE
+		p9_wrfid_cache_add(fid, fid_clone);
+#endif
+	}
+
+	if (!uio->uio_resid) {
+		rc = 0;
 		goto out;
-
-	if (!uio->uio_resid)
-		return 0;
+	}
 
 	iov = uio->uio_iov;
 	while (!iov->iov_len) {
@@ -506,10 +568,10 @@ static int uk_9pfs_write(struct vnode *vp, struct uio *uio, int ioflag)
 		uio->uio_iovcnt--;
 	}
 
-	rc = uk_9p_write(dev, fid, uio->uio_offset,
+	rc = uk_9p_write(dev, fid_clone, uio->uio_offset,
 			    iov->iov_len, iov->iov_base);
 	if (rc < 0)
-		return -rc;
+		goto out;
 
 	iov->iov_base = (char *)iov->iov_base + rc;
 	iov->iov_len -= rc;
@@ -530,7 +592,9 @@ static int uk_9pfs_write(struct vnode *vp, struct uio *uio, int ioflag)
 		vp->v_size = uio->uio_offset;
 
 out:
-	uk_9pfid_put(fid);
+#if !CONFIG_LIBUK9P_FID_CACHE
+	uk_9pfid_put(fid_clone);
+#endif
 	return -rc;
 }
 

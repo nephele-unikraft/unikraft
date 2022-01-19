@@ -40,3 +40,10 @@ uk_9p_read
 uk_9p_write
 uk_9p_stat
 uk_9p_wstat
+
+p9_fid_cache_add
+p9_fid_cache_get
+p9_fid_cache_contains
+p9_wrfid_cache_get
+p9_wrfid_cache_add
+p9_wrfid_cache_del

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 /*
- * Authors: Cristian Banu <cristb@gmail.com>
+ * Authors: Costin Lupu <costin.lupu@cs.pub.ro>
  *
- * Copyright (c) 2019, University Politehnica of Bucharest. All rights reserved.
+ * Copyright (c) 2022, University Politehnica of Bucharest. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,51 +28,31 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- *
- * THIS HEADER MAY NOT BE EXTRACTED OR MODIFIED IN ANY WAY.
  */
 
-#include <uk/config.h>
-#include <uk/refcount.h>
-#include <uk/alloc.h>
-#include <uk/9pdev.h>
+#ifndef __UK_9PCACHE__
+#define __UK_9PCACHE__
+
+#include <vfscore/vnode.h>
 #include <uk/9pfid.h>
-#if CONFIG_LIBUK9P_FID_CACHE
-#include <uk/9pcache.h>
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-struct uk_9pfid *uk_9pfid_alloc(struct uk_9pdev *dev)
-{
-	struct uk_9pfid *fid;
+struct uk_9pfid *p9_fid_cache_get(struct vnode *dvp, char *name,
+		struct uk_9p_stat *stat);
+bool p9_fid_cache_contains(struct uk_9pfid *fid);
 
-	fid = uk_calloc(dev->a, 1, sizeof(*fid));
-	if (fid == NULL)
-		goto out;
+int p9_fid_cache_add(struct vnode *dvp, char *name, struct uk_9pfid *fid,
+		struct uk_9p_stat *stat);
+int p9_fid_cache_del(struct uk_9pfid *fid);
 
-	fid->_dev = dev;
 
-	return fid;
+struct uk_9pfid *p9_wrfid_cache_get(struct uk_9pfid *orig);
+int p9_wrfid_cache_add(struct uk_9pfid *orig, struct uk_9pfid *clone);
+int p9_wrfid_cache_del(struct uk_9pfid *orig);
 
-out:
-	return NULL;
-}
+void p9_cache_del(struct uk_9pfid *fid);
 
-void uk_9pfid_get(struct uk_9pfid *fid)
-{
-	uk_refcount_acquire(&fid->refcount);
-}
-
-int uk_9pfid_put(struct uk_9pfid *fid)
-{
-	int last;
-
-	last = uk_refcount_release(&fid->refcount);
-	if (last) {
-#if CONFIG_LIBUK9P_FID_CACHE
-		p9_cache_del(fid);
-#endif
-		uk_9pdev_fid_release(fid);
-	}
-
-	return last;
-}
+#endif /* __UK_9PCACHE__ */
