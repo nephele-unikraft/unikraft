@@ -1,0 +1,15 @@
+config LIBPROFILING
+	bool "Profiling"
+	default n
+	select LIBNOLIBC if !HAVE_LIBC
+	select LIBUKTIME
+	select LIBHASHTABLE
+
+if LIBPROFILING
+config LIBPROFILING_TRACING
+	bool "Tracing"
+	default n
+	select LIBPOSIX_MMAP
+	help
+		Enable tracing.
+endif

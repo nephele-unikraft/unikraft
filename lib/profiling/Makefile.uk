@@ -1,0 +1,77 @@
+$(eval $(call addlib_s,libprofiling,$(CONFIG_LIBPROFILING)))
+
+LIBPROFILING_COMMON_INCLUDES-y     += -I$(LIBPROFILING_BASE)
+CINCLUDES-$(CONFIG_LIBPROFILING)   += $(LIBPROFILING_COMMON_INCLUDES-y)
+CXXINCLUDES-$(CONFIG_LIBPROFILING) += $(LIBPROFILING_COMMON_INCLUDES-y)
+
+LIBPROFILING_SUPPRESS_FLAGS-y   += -Wno-unused-parameter
+LIBPROFILING_CFLAGS-y           += $(LIBPROFILING_SUPPRESS_FLAGS-y)
+
+COMPFLAGS-$(CONFIG_LIBPROFILING)           += -DLIB_PROFILING=1
+
+LIBPROFILING_SRCS-y += $(LIBPROFILING_BASE)/profile.c
+
+
+ifeq ($(CONFIG_LIBPROFILING_TRACING),y)
+
+COMPFLAGS-$(CONFIG_LIBPROFILING_TRACING)           += -finstrument-functions
+
+LIBPROFILING_SRCS-y += $(LIBPROFILING_BASE)/trace_func.c
+LIBPROFILING_SRCS-y += $(LIBPROFILING_BASE)/trace_func_hash.c
+
+LIBPROFILING_CFLAGS-y           += -DINSTRUMENTED_LIB_PATH=\"foo\"
+#LIBPROFILING_CFLAGS-y           += -DPROFILE_TRIGGER_INIT_VALUE=1
+#LIBPROFILING_CFLAGS-y += -DUK_DEBUG_TRACE
+
+#COMPFLAGS-y           += -finstrument-functions-exclude-function-list=__getreent,__get_current_locale,__localeconv_l,_localeconv_r,uk_semaphore_down,uk_semaphore_down_to
+
+CONFIG_LIBPROFILING_TRACINGxx=y
+ifeq ($(CONFIG_LIBPROFILING_TRACINGxx),y)
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/include/uk/plat/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/include/uk/bitmap.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/include/uk/bitops.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/include/uk/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/arch/x86/x86_64/include/uk/asm/atomic.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/hashtable/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/syscall_shim/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/ukalloc/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/ukallocbbuddy/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/ukdebug/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/uklock/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/ukmpi/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/uksched/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/ukschedcoop/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/uksglist/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/uktime/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/vfscore/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/lib/posix-signal/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/common/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/kvm/x86/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/console.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/emg_console.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/hv_console.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/lcpu.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/xenbus/xs_comms.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/xenbus/xs_comms.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/include/xen-x86/hypercall64.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/unikraft.git/plat/xen/include/common/events.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/libs/lwip/alloc.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/libs/lwip/mailbox.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/libs/lwip/mutex.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/libs/newlib/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/libs/pthread-embedded/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/libs/tinyalloc/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/cloning-apps/build/libnewlibc/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libnewlibc/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libtinyalloc/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libpthread-embedded/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libredis/origin/redis-5.0.6/deps/jemalloc/
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libredis/origin/redis-5.0.6/src/siphash.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libredis/origin/redis-5.0.6/src/dict.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libredis/origin/redis-5.0.6/src/dict.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libredis/origin/redis-5.0.6/src/sds.c
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libredis/origin/redis-5.0.6/src/sds.h
+COMPFLAGS-y += -finstrument-functions-exclude-file-list=/home/wolf/nfv/dev/unikraft/apps/redis/build/libredis/origin/redis-5.0.6/src/zmalloc.c
+endif
+
+endif
