@@ -55,6 +55,8 @@
 #include <xen/clone.h>
 #include <xenbus/xs.h>
 
+static int mydomid = -1;
+
 struct child_domain {
 	domid_t domid;
 	struct uk_list_head child_list;
@@ -118,6 +120,7 @@ int ukplat_clone(unsigned int nr_children, unsigned short *child_ids)
 	local_irq_restore(flags);
 
 	if (rc == 0) {
+		/* parent */
 		for (unsigned int i = 0; i < nr_children; i++) {
 			rc = child_domains_add(child_ids[i]);
 			if (rc) {
@@ -125,6 +128,10 @@ int ukplat_clone(unsigned int nr_children, unsigned short *child_ids)
 				child_domains_remove_last_n(i);
 			}
 		}
+	} else {
+		/* child */
+		/* reset domid in order to reinit it*/
+		mydomid = -1;
 	}
 
 	return rc;
@@ -250,7 +257,9 @@ int ukplat_wait_any(struct ukplat_wait_result *result, int options)
 
 int ukplat_get_domain_id(void)
 {
-	return xs_get_self_id();
+	if (mydomid == -1)
+		mydomid = xs_get_self_id();
+	return mydomid;
 }
 
 static unsigned int uint_hash_from_key_fn(void *k)
