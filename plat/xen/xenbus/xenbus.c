@@ -234,6 +234,44 @@ static int xenbus_init(struct uk_alloc *a)
 	return 0;
 }
 
+#ifdef CONFIG_MIGRATION
+void xenbus_suspend(void)
+{
+	struct xenbus_device *dev;
+
+	/* Suspend xenbus devices */
+	UK_TAILQ_FOREACH(dev, &xbh.dev_list, next) {
+		if (dev->pm_ops.suspend) {
+			UK_ASSERT(dev->pm_ops.dev != NULL);
+			UK_ASSERT(dev->pm_ops.suspend(dev->pm_ops.dev) == 0);
+		}
+	}
+
+	xs_comms_suspend();
+}
+
+void xenbus_resume(int canceled)
+{
+	struct xenbus_device *dev;
+
+	xs_comms_resume(canceled);
+
+	/* Resume xenbus devices */
+	UK_TAILQ_FOREACH(dev, &xbh.dev_list, next) {
+		if (dev->pm_ops.resume) {
+			UK_ASSERT(dev->pm_ops.dev != NULL);
+			UK_ASSERT(dev->pm_ops.resume(dev->pm_ops.dev) == 0);
+		}
+	}
+}
+#endif
+
+void xenbus_register_device(struct xenbus_device *dev)
+{
+	UK_ASSERT(dev != NULL);
+	UK_TAILQ_INSERT_TAIL(&xbh.dev_list, dev, next);
+}
+
 void _xenbus_register_driver(struct xenbus_driver *drv)
 {
 	UK_ASSERT(drv != NULL);

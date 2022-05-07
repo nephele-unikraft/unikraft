@@ -48,6 +48,10 @@ void hv_console_init(void);
 int hv_console_output(const char *str, unsigned int len);
 void hv_console_flush(void);
 int hv_console_input(char *str, unsigned int maxlen);
+#ifdef CONFIG_MIGRATION
+void hv_console_suspend(void);
+void hv_console_resume(void);
+#endif /* CONFIG_MIGRATION */
 #else /* (CONFIG_XEN_KERNEL_HV_CONSOLE || CONFIG_XEN_DEBUG_HV_CONSOLE) */
 #define hv_console_prepare()			\
 	do {} while (0)
@@ -57,6 +61,12 @@ int hv_console_input(char *str, unsigned int maxlen);
 	do {} while (0)
 #define hv_console_input(str, maxlen) \
 	(-ENOTSUP)
+#ifdef CONFIG_MIGRATION
+#define hv_console_suspend() \
+	do {} while (0)
+#define hv_console_resume() \
+	do {} while (0)
+#endif /* CONFIG_MIGRATION */
 #endif /* (CONFIG_XEN_KERNEL_HV_CONSOLE || CONFIG_XEN_DEBUG_HV_CONSOLE) */
 
 #if CONFIG_XEN_KERNEL_HV_CONSOLE

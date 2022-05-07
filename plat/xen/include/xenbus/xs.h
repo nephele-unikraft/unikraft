@@ -227,6 +227,11 @@ struct xenbus_watch *xs_watch_path(xenbus_transaction_t xbt, const char *path);
  */
 int xs_unwatch(xenbus_transaction_t xbt, struct xenbus_watch *watch);
 
+
+#ifdef CONFIG_MIGRATION
+int xs_watch_resume(void *watch);
+#endif
+
 /*
  * Start a xenbus transaction. Returns the transaction in xbt on
  * success or an error number otherwise.

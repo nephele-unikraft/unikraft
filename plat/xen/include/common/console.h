@@ -46,6 +46,10 @@ void prepare_console(void);
  */
 void init_console(void);
 
+#ifdef CONFIG_MIGRATION
+void console_suspend(void);
+void console_resume(void);
+#endif
 
 void flush_console(void);
 

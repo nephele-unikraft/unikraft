@@ -54,6 +54,14 @@ const char *gnttabop_error(__s16 status);
 
 grant_entry_v1_t *gnttab_arch_init(int nr_grant_frames);
 
+#ifdef CONFIG_MIGRATION
+void gnttab_suspend(void);
+void gnttab_resume(void);
+
+void gnttab_arch_suspend(grant_entry_v1_t *gnttab_table, int nr_grant_frames);
+void gnttab_arch_resume(grant_entry_v1_t *gnttab_table, int nr_grant_frames);
+#endif
+
 #endif /* CONFIG_XEN_GNTTAB */
 
 #endif /* !__GNTTAB_H__ */

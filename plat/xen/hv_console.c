@@ -246,9 +246,23 @@ void hv_console_init(void)
 	if (err <= 0)
 		UK_CRASH("Failed to bind event channel for hv_console: %i\n",
 			 err);
-	unmask_evtchn(console_evtchn);
+//	unmask_evtchn(console_evtchn);
 
 	console_ready = 1; /* enable notification of backend */
 	/* flush queued output */
 	notify_remote_via_evtchn(console_evtchn);
 }
+
+#ifdef CONFIG_MIGRATION
+void hv_console_suspend(void)
+{
+	console_ready = 0;
+	mask_evtchn(console_evtchn);
+	unbind_evtchn(console_evtchn);
+}
+
+void hv_console_resume(void)
+{
+	hv_console_init();
+}
+#endif

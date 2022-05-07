@@ -245,15 +245,15 @@ void ukplat_time_fini(void)
 	unbind_evtchn(port);
 }
 
-#ifdef CONFIG_MIGRATION /* TODO wip */
-void suspend_time(void)
+#ifdef CONFIG_MIGRATION
+void time_suspend(void)
 {
 	/* Clear any pending timer */
 	HYPERVISOR_set_timer_op(0);
 	unbind_evtchn(port);
 }
 
-void resume_time(void)
+void time_resume(void)
 {
 	port = bind_virq(VIRQ_TIMER, &timer_handler, NULL);
 	unmask_evtchn(port);

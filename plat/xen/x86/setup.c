@@ -89,6 +89,12 @@
 #include <xen-x86/setup.h>
 #include <xen/arch-x86/cpuid.h>
 #include <xen/arch-x86/hvm/start_info.h>
+#ifdef CONFIG_MIGRATION
+#include <uk/plat/common/_time.h>
+#include <common/gnttab.h>
+#include <common/console.h>
+#include <xenbus/xenbus.h>
+#endif
 
 static char cmdline[MAX_GUEST_CMDLINE];
 
@@ -124,6 +130,18 @@ static inline void _init_shared_info(void)
 		 UVMF_INVLPG)))
 		UK_CRASH("Failed to map shared_info: %d\n", ret);
 	HYPERVISOR_shared_info = (shared_info_t *)_libxenplat_shared_info;
+}
+
+static inline void _fini_shared_info(void)
+{
+	int ret;
+	pte_t nullpte = { };
+	extern char _libxenplat_shared_info[__PAGE_SIZE];
+
+	if ((ret = HYPERVISOR_update_va_mapping(
+			(unsigned long)_libxenplat_shared_info,
+			nullpte, UVMF_INVLPG)))
+		UK_CRASH("Failed to unmap shared_info page. ret=%d\n", ret);
 }
 
 static inline void _init_mem(void)
@@ -208,3 +226,72 @@ void _libxenplat_x86entry(void *start_info)
 
 	ukplat_entry_argp(CONFIG_UK_NAME, cmdline, MAX_GUEST_CMDLINE);
 }
+
+#ifdef CONFIG_MIGRATION
+void arch_pre_suspend(void)
+{
+#ifdef CONFIG_PARAVIRT
+	/* Replace xenstore and console mfns with the correspondent pfns */
+	HYPERVISOR_start_info->store_mfn =
+			mfn_to_pfn(HYPERVISOR_start_info->store_mfn);
+	HYPERVISOR_start_info->console.domU.mfn =
+			mfn_to_pfn(HYPERVISOR_start_info->console.domU.mfn);
+#else
+#error "HVM not implemented"
+#endif
+
+	_fini_shared_info();
+
+	arch_mm_pre_suspend();
+}
+
+void arch_post_suspend(int canceled)
+{
+#if CONFIG_PARAVIRT
+	if (canceled) {
+		HYPERVISOR_start_info->store_mfn =
+				pfn_to_mfn(HYPERVISOR_start_info->store_mfn);
+		HYPERVISOR_start_info->console.domU.mfn =
+				pfn_to_mfn(HYPERVISOR_start_info->console.domU.mfn);
+	}
+#else
+#error "HVM not implemented"
+#endif
+
+	_init_shared_info();
+
+	arch_mm_post_suspend(canceled);
+}
+
+void pre_suspend(void)
+{
+#ifdef CONFIG_XEN_XENBUS
+	xenbus_suspend();
+#endif
+
+	local_irq_disable();
+
+	console_suspend();
+
+	time_suspend();
+
+	suspend_events();
+
+	gnttab_suspend();
+}
+
+void post_suspend(int canceled)
+{
+	gnttab_resume();
+
+	time_resume();
+
+	console_resume();
+
+	local_irq_enable();
+
+#ifdef CONFIG_XEN_XENBUS
+	xenbus_resume(canceled);
+#endif
+}
+#endif

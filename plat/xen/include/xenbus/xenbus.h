@@ -91,6 +91,25 @@ UK_TAILQ_HEAD(xenbus_driver_list, struct xenbus_driver);
 	_XENBUS_REGISTER_CTOR(						\
 		_XENBUS_REGFNNAME(libname, _xenbus_register_driver))
 
+#ifdef CONFIG_MIGRATION
+struct xenbus_pm_ops {
+	/**< Pointer to device structure, this argument will be passed to
+	 * suspend/resume functions */
+	void *dev;
+	/**< restore function for a device. Returns 0 on success, -err
+	 * otherwise. On error system should shutdown */
+	int (*suspend)(void *argp);
+	/**< restore function for a device. Returns 0 on success, -err
+	 * otherwise. On error system should shutdown */
+	int (*resume)(void *argp);
+};
+
+void xenbus_suspend(void);
+void xenbus_resume(int canceled);
+#endif
+
+void xenbus_register_device(struct xenbus_device *dev);
+
 /* Do not use this function directly: */
 void _xenbus_register_driver(struct xenbus_driver *drv);
 
@@ -135,6 +154,10 @@ struct xenbus_device {
 	struct xenbus_watch *otherend_watch;
 	/**< Xenbus driver */
 	struct xenbus_driver *drv;
+#ifdef CONFIG_MIGRATION
+	/**< Power management operations */
+	struct xenbus_pm_ops pm_ops;
+#endif
 };
 UK_TAILQ_HEAD(xenbus_device_list, struct xenbus_device);
 

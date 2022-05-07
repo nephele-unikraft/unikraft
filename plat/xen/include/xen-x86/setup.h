@@ -48,4 +48,12 @@ extern char _libxenplat_bootstack[];
 
 extern start_info_t *HYPERVISOR_start_info;
 
+#ifdef CONFIG_MIGRATION
+void pre_suspend(void);
+void post_suspend(int canceled);
+
+void arch_pre_suspend(void);
+void arch_post_suspend(int canceled);
+#endif
+
 #endif /* __SETUP_H__ */

@@ -104,6 +104,9 @@ void ukplat_terminate(enum ukplat_gstate request) __noreturn;
  */
 int ukplat_suspend(void);
 
+void ukplat_shutdown_init(void);
+void ukplat_shutdown_fini(void);
+
 #ifdef __cplusplus
 }
 #endif

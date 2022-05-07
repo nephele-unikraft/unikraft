@@ -69,6 +69,18 @@ void init_console(void)
 	hv_console_init();
 }
 
+#ifdef CONFIG_MIGRATION
+void console_suspend(void)
+{
+	hv_console_suspend();
+}
+
+void console_resume(void)
+{
+	hv_console_resume();
+}
+#endif
+
 int ukplat_coutd(const char *str, unsigned int len)
 {
 	int ret, ret2;

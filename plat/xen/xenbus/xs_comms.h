@@ -61,4 +61,7 @@ int xs_msg_reply(enum xsd_sockmsg_type msg_type, xenbus_transaction_t xbt,
 	const struct xs_iovec *req_iovecs, int req_iovecs_num,
 	struct xs_iovec *rep_iovec);
 
+void xs_comms_suspend(void);
+void xs_comms_resume(int canceled);
+
 #endif /* __XS_COMMS_H__ */

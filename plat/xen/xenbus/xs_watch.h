@@ -78,4 +78,8 @@ int xs_watch_destroy(struct xs_watch *watch);
  */
 struct xs_watch *xs_watch_find(const char *path, const char *token);
 
+#ifdef CONFIG_MIGRATION
+int xs_watches_resume(void);
+#endif
+
 #endif /* __XS_WATCH_H__ */

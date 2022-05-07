@@ -75,6 +75,15 @@ config XEN_GNTTAB
 	help
 		Support grant table operations
 
+config MIGRATION
+	bool "Enable save/restore support"
+	default n
+	select LIBUKDEBUG
+	select XEN_PV_BUILD_P2M
+	depends on XEN_XENBUS
+	help
+		Enable save/restore support
+
 config XEN_XENBUS
 	bool "Xenbus/XenStore driver"
 	default y if XEN_PV

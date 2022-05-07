@@ -620,3 +620,48 @@ void xs_comms_fini(void)
 	uk_thread_kill(xsh.thread);
 	xsh.thread = NULL;
 }
+
+#ifdef CONFIG_MIGRATION
+void xs_comms_suspend(void)
+{
+	/* Check for live requests and wait until they finish */
+	while (1) {
+		ukarch_spin_lock(&xs_req_pool.lock);
+		if (xs_req_pool.num_live == 0)
+			break;
+		ukarch_spin_unlock(&xs_req_pool.lock);
+		uk_waitq_wait_event(&xs_req_pool.waitq,
+				(xs_req_pool.num_live == 0));
+	}
+
+	mask_evtchn(xsh.evtchn);
+	unbind_evtchn(xsh.evtchn);
+
+	xsh.buf = NULL;
+
+	ukarch_spin_unlock(&xs_req_pool.lock);
+}
+
+void xs_comms_resume(int canceled)
+{
+	evtchn_port_t port;
+	int err;
+
+	xsh.buf = mfn_to_virt(HYPERVISOR_start_info->store_mfn);
+
+	port = bind_evtchn(xsh.evtchn, xs_evtchn_handler, NULL);
+	UK_ASSERT(port == xsh.evtchn);
+	unmask_evtchn(xsh.evtchn);
+
+	uk_pr_info("Xenstore connection reinitialised on port %d, buf %p (mfn %lx)\n",
+		xsh.evtchn, xsh.buf, HYPERVISOR_start_info->store_mfn);
+
+	if (!canceled) {
+		err = xs_watches_resume();
+		if (err)
+			uk_pr_warn("ERROR resuming %d watches.\n", err);
+	}
+
+	notify_remote_via_evtchn(xsh.evtchn);
+}
+#endif

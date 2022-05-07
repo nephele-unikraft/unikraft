@@ -582,6 +582,35 @@ out:
 	return err;
 }
 
+#ifdef CONFIG_MIGRATION
+int xs_watch_resume(void *watch)
+{
+	struct xs_watch *xsw;
+	struct xs_iovec req[2];
+	int err;
+
+	if (watch == NULL) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	xsw = __containerof(watch, struct xs_watch, base);
+
+	/* TODO duplicated code, see xs_watch_path */
+	req[0] = XS_IOVEC_STR_NULL(xsw->xs.path);
+	req[1] = XS_IOVEC_STR_NULL(xsw->xs.token);
+
+	err = xs_msg(XS_WATCH, XBT_NIL, req, ARRAY_SIZE(req));
+	if (err && err != -EEXIST) {
+		uk_pr_err("Error resuming %s watch: %d\n", xsw->xs.path, err);
+		xs_watch_destroy(xsw);
+	}
+
+out:
+	return err;
+}
+#endif
+
 /*
  * Transactions
  */

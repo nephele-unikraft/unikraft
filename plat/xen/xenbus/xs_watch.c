@@ -119,3 +119,27 @@ struct xs_watch *xs_watch_find(const char *path, const char *token)
 
 	return NULL;
 }
+
+#ifdef CONFIG_MIGRATION
+
+extern int xs_watch_resume(void *watch);
+
+int xs_watches_resume(void)
+{
+	struct xenbus_watch *xbw, *tmp;
+	struct xs_watch *xsw;
+	int err;
+
+	UK_TAILQ_FOREACH_SAFE(xbw, &xs_watch_list, watch_list, tmp) {
+		xsw = __containerof(xbw, struct xs_watch, base);
+		err = xs_watch_resume(xsw);
+		if (err) {
+			uk_pr_err("Error resuming watch on path '%s' token '%s': %d\n",
+					xsw->xs.path, xsw->xs.token, err);
+			goto out;
+		}
+	}
+out:
+	return err;
+}
+#endif

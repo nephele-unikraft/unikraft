@@ -267,6 +267,18 @@ const char *gnttabop_error(__s16 status)
 		return gnttabop_error_msgs[status];
 }
 
+#ifdef CONFIG_MIGRATION
+void gnttab_suspend(void)
+{
+	gnttab_arch_suspend(gnttab.table, NR_GRANT_FRAMES);
+}
+
+void gnttab_resume(void)
+{
+	gnttab_arch_resume(gnttab.table, NR_GRANT_FRAMES);
+}
+#endif
+
 void gnttab_init(void)
 {
 	grant_ref_t gref;

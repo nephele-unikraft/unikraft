@@ -152,6 +152,11 @@ static void main_thread_func(void *arg)
 	}
 	uk_pr_info("])\n");
 
+#ifdef CONFIG_MIGRATION
+	ukplat_shutdown_init();
+	uk_sched_yield();
+#endif
+
 	ret = main(tma->argc, tma->argv);
 	uk_pr_info("main returned %d, halting system\n", ret);
 	ret = (ret != 0) ? UKPLAT_CRASH : UKPLAT_HALT;

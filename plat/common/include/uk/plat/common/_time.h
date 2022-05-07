@@ -39,4 +39,9 @@
 
 void time_block_until(__snsec until);
 
+#ifdef CONFIG_MIGRATION
+void time_suspend(void);
+void time_resume(void);
+#endif
+
 #endif /* __PLAT_CMN_TIME_H__ */

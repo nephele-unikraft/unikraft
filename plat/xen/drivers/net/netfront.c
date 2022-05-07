@@ -271,6 +271,7 @@ static int netfront_rxq_dequeue(struct uk_netdev_rx_queue *rxq,
 
 	*netbuf = buf;
 
+	rxq->netbuf[id] = NULL;
 	rxq->ring.rsp_cons++;
 	count = 1;
 
@@ -450,6 +451,92 @@ static struct uk_netdev_tx_queue *netfront_txq_setup(struct uk_netdev *n,
 	return txq;
 }
 
+static int netfront_txq_suspend(struct uk_netdev *n, uint16_t queue_id)
+{
+	struct netfront_dev *nfdev = to_netfront_dev(n);
+	struct uk_netdev_tx_queue *txq;
+	int rc = 0;
+
+	txq  = &nfdev->txqs[queue_id];
+	if (!txq->initialized) {
+		uk_pr_err("Uninitialized queue cannot be suspended.\n");
+		rc = -EINVAL;
+		goto out;
+	}
+
+	mask_evtchn(txq->evtchn);
+	if (nfdev->split_evtchn || !nfdev->rxqs[queue_id].initialized)
+		unbind_evtchn(txq->evtchn);
+
+	gnttab_end_access(txq->ring_ref);
+
+	for (int i = 0; i < txq->ring_size; i++) {
+		struct uk_netbuf *netbuf = txq->netbuf[i];
+
+		if (!netbuf)
+			continue;
+
+		if (txq->gref[i] != GRANT_INVALID_REF) {
+			gnttab_end_access(txq->gref[i]);
+			txq->gref[i] = GRANT_INVALID_REF;
+		}
+		uk_netbuf_free_single(netbuf);
+		txq->netbuf[i] = NULL;
+
+		add_id_to_freelist(i, txq->freelist);
+		uk_semaphore_up(&txq->sem);
+	}
+
+	txq->initialized = false;
+
+out:
+	return rc;
+}
+
+static int netfront_txq_resume(struct uk_netdev *n, uint16_t queue_id)
+{
+	struct netfront_dev *nfdev = to_netfront_dev(n);
+	struct uk_netdev_tx_queue *txq;
+	netif_tx_sring_t *sring;
+	int rc = 0;
+
+	txq  = &nfdev->txqs[queue_id];
+	if (txq->initialized) {
+		uk_pr_err("Initialized queue cannot be resumed.\n");
+		rc = -EINVAL;
+		goto out;
+	}
+
+	sring = txq->ring.sring;
+	memset(sring, 0, PAGE_SIZE);
+	SHARED_RING_INIT(sring);
+	FRONT_RING_INIT(&txq->ring, sring, PAGE_SIZE);
+
+	txq->ring_ref = gnttab_grant_access(nfdev->xendev->otherend_id,
+		virt_to_mfn(sring), 0);
+	UK_ASSERT(txq->ring_ref != GRANT_INVALID_REF);
+
+	/* Setup event channel */
+	if (nfdev->split_evtchn || !nfdev->rxqs[queue_id].initialized) {
+		rc = evtchn_alloc_unbound(nfdev->xendev->otherend_id,
+				NULL, NULL,
+				&txq->evtchn);
+		if (rc) {
+			uk_pr_err("Error creating event channel: %d\n", rc);
+			gnttab_end_access(txq->ring_ref);
+			goto out;
+		}
+	} else
+		txq->evtchn = nfdev->txqs[queue_id].evtchn;
+
+	mask_evtchn(txq->evtchn);
+
+	txq->initialized = true;
+
+out:
+	return rc;
+}
+
 static void netfront_handler(evtchn_port_t port __unused,
 		struct __regs *regs __unused, void *arg)
 {
@@ -532,6 +619,100 @@ static struct uk_netdev_rx_queue *netfront_rxq_setup(struct uk_netdev *n,
 	nfdev->rxqs_num++;
 
 	return rxq;
+}
+
+static int netfront_rxq_suspend(struct uk_netdev *n, uint16_t queue_id)
+{
+	struct netfront_dev *nfdev = to_netfront_dev(n);
+	struct uk_netdev_rx_queue *rxq;
+	struct uk_netdev_event_handler *h;
+	int rc = 0;
+
+	rxq  = &nfdev->rxqs[queue_id];
+	if (!rxq->initialized) {
+		uk_pr_err("Uninitialized queue cannot be suspended.\n");
+		rc = -EINVAL;
+		goto out;
+	}
+
+	mask_evtchn(rxq->evtchn);
+
+	h = &n->_data->rxq_handler[queue_id];
+	uk_thread_block(h->dispatcher);
+
+	if (nfdev->split_evtchn || !nfdev->rxqs[queue_id].initialized)
+		unbind_evtchn(rxq->evtchn);
+
+	gnttab_end_access(rxq->ring_ref);
+
+	for (int i = 0; i < rxq->ring_size; i++) {
+		struct uk_netbuf *netbuf = rxq->netbuf[i];
+
+		if (netbuf) {
+			if (rxq->gref[i] != GRANT_INVALID_REF)
+				gnttab_end_access(rxq->gref[i]);
+			uk_netbuf_free(netbuf);
+		}
+	}
+
+	rxq->initialized = false;
+
+out:
+	return rc;
+}
+
+static int netfront_rxq_resume(struct uk_netdev *n, uint16_t queue_id)
+{
+	struct netfront_dev *nfdev = to_netfront_dev(n);
+	struct uk_netdev_rx_queue *rxq;
+	netif_rx_sring_t *sring;
+	struct uk_netdev_event_handler *h;
+	int rc = 0;
+
+	rxq  = &nfdev->rxqs[queue_id];
+	if (rxq->initialized) {
+		uk_pr_err("Initialized queue cannot be resumed.\n");
+		rc = -EINVAL;
+		goto out;
+	}
+
+	sring = rxq->ring.sring;
+	memset(sring, 0, PAGE_SIZE);
+	SHARED_RING_INIT(sring);
+	FRONT_RING_INIT(&rxq->ring, sring, PAGE_SIZE);
+
+	rxq->ring_ref = gnttab_grant_access(nfdev->xendev->otherend_id,
+		virt_to_mfn(sring), 0);
+	UK_ASSERT(rxq->ring_ref != GRANT_INVALID_REF);
+
+	/* Setup event channel */
+	if (nfdev->split_evtchn || !nfdev->txqs[queue_id].initialized) {
+		rc = evtchn_alloc_unbound(nfdev->xendev->otherend_id,
+				netfront_handler, rxq,
+				&rxq->evtchn);
+		if (rc) {
+			uk_pr_err("Error creating event channel: %d\n", rc);
+			gnttab_end_access(rxq->ring_ref);
+			goto out;
+		}
+	} else {
+		rxq->evtchn = nfdev->txqs[queue_id].evtchn;
+		/* overwriting event handler */
+		bind_evtchn(rxq->evtchn, netfront_handler, rxq);
+	}
+
+	netfront_rx_fillup(rxq, rxq->ring_size);
+
+	h = &n->_data->rxq_handler[queue_id];
+	uk_thread_wake(h->dispatcher);
+
+	if (rxq->intr_enabled)
+		unmask_evtchn(rxq->evtchn);
+
+	rxq->initialized = true;
+
+out:
+	return rc;
 }
 
 static int netfront_rxtx_alloc(struct netfront_dev *nfdev,
@@ -774,6 +955,82 @@ static unsigned int netfront_promisc_get(struct uk_netdev *n)
 	return nfdev->promisc;
 }
 
+static int netfront_suspend(void *argp)
+{
+	struct uk_netdev *dev = argp;
+	struct netfront_dev *nfdev;
+	int err = 0;
+
+	UK_ASSERT(dev != NULL);
+
+	nfdev = __containerof(dev, struct netfront_dev, netdev);
+
+	err = netfront_xb_disconnect(nfdev);
+	if (err) {
+		uk_pr_err("Error disconnecting from backend: %d.\n", err);
+		return err;
+	}
+
+	for (int i = 0; i < nfdev->rxqs_num; i++) {
+		err = netfront_rxq_suspend(dev, i);
+		if (err) {
+			uk_pr_err("Error suspending rx queue %d.\n", i);
+			goto out;
+		}
+	}
+
+	for (int i = 0; i < nfdev->txqs_num; i++) {
+		err = netfront_txq_suspend(dev, i);
+		if (err) {
+			uk_pr_err("Error suspending tx queue %d.\n", i);
+			goto out;
+		}
+	}
+out:
+	return err;
+}
+
+static int netfront_resume(void *argp)
+{
+	struct uk_netdev *dev = argp;
+	struct netfront_dev *nfdev;
+	int err = 0;
+
+	UK_ASSERT(dev != NULL);
+
+	nfdev = __containerof(dev, struct netfront_dev, netdev);
+
+	err = netfront_xb_init(nfdev, drv_allocator);
+	if (err) {
+		uk_pr_err("Error reinitializing Xenbus data: %d.\n", err);
+		return err;
+	}
+
+	for (int i = 0; i < nfdev->rxqs_num; i++) {
+		err = netfront_rxq_resume(dev, i);
+		if (err) {
+			uk_pr_err("Error resuming rx queue %d.\n", i);
+			goto out;
+		}
+	}
+
+	for (int i = 0; i < nfdev->txqs_num; i++) {
+		err = netfront_txq_resume(dev, i);
+		if (err) {
+			uk_pr_err("Error resuming tx queue %d.\n", i);
+			goto out;
+		}
+	}
+
+	err = netfront_xb_connect(nfdev);
+	if (err) {
+		uk_pr_err("Error connecting to backend: %d.\n", err);
+		return err;
+	}
+out:
+	return err;
+}
+
 static const struct uk_netdev_ops netfront_ops = {
 	.configure = netfront_configure,
 	.start = netfront_start,
@@ -825,6 +1082,14 @@ static int netfront_add_dev(struct xenbus_device *xendev)
 		goto err_register;
 	}
 	nfdev->uid = rc;
+
+#ifdef CONFIG_MIGRATION
+	xendev->pm_ops.dev = (void *) &nfdev->netdev;
+	xendev->pm_ops.suspend = netfront_suspend;
+	xendev->pm_ops.resume = netfront_resume;
+#endif /* CONFIG_MIGRATION */
+	xenbus_register_device(xendev);
+
 	rc = 0;
 
 out:
