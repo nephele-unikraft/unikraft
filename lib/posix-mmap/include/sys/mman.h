@@ -51,6 +51,8 @@
 #define MAP_ANONYMOUS	0x20
 #define MAP_ANON	MAP_ANONYMOUS
 
+#define MS_SYNC        4
+
 void *mmap(void *addr, size_t length, int prot, int flags,
 		   int fd, off_t offset);
 
