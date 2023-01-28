@@ -42,6 +42,7 @@
 #if CONFIG_LIBUKSCHEDCOOP
 #include <uk/schedcoop.h>
 #endif
+#include <sys/mman.h>
 
 struct uk_sched *uk_sched_head;
 
@@ -141,11 +142,19 @@ static void *create_stack(struct uk_alloc *allocator)
 {
 	void *stack;
 
+#ifdef CONFIG_LIBPOSIX_MMAP
+	stack = mmap(NULL, STACK_SIZE, PROT_WRITE | PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (!stack) {
+		uk_pr_err("Failed to allocate thread stack: Not enough memory\n");
+		errno = ENOMEM;
+	}
+#else
 	if (uk_posix_memalign(allocator, &stack,
 			      STACK_SIZE, STACK_SIZE) != 0) {
 		uk_pr_err("Failed to allocate thread stack: Not enough memory\n");
 		return NULL;
 	}
+#endif
 
 	return stack;
 }
@@ -252,7 +261,11 @@ void uk_sched_thread_destroy(struct uk_sched *sched, struct uk_thread *thread)
 
 	UK_TAILQ_REMOVE(&sched->exited_threads, thread, thread_list);
 	uk_thread_fini(thread, sched->allocator);
+#ifdef CONFIG_LIBPOSIX_MMAP
+	munmap(thread->stack, STACK_SIZE);
+#else
 	uk_free(sched->allocator, thread->stack);
+#endif
 	if (thread->tls)
 		uk_free(sched->allocator, thread->tls);
 	uk_free(sched->allocator, thread);
