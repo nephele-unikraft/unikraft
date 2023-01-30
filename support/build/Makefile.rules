@@ -297,7 +297,7 @@ define _extracttoorigin_tgz =
 $(BUILD_DIR)/$(1)/.origin: $(2)
 	$(call verbose_cmd,UNTAR,$(1)':' $(notdir $(2)), \
 	  $(TAR) -xzf $(2) \
-	         -C $(BUILD_DIR)/$(1)/origin && \
+	         -C $(BUILD_DIR)/$(1)/origin || $(TAR) -xzf $(2) -C $(BUILD_DIR)/$(1)/origin && \
 	  $(TOUCH) $(BUILD_DIR)/$(1)/.origin)
 endef
 

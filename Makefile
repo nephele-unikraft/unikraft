@@ -569,7 +569,7 @@ LEX     	:= flex
 PATCH		:= patch
 GZIP		:= gzip
 TAR		:= tar
-UNZIP		:= unzip -qq -u
+UNZIP		:= unzip -qq
 WGET		:= wget
 DTC		:= dtc
 # Time requires the full path so that subarguments are handled correctly
